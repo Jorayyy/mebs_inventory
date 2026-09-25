@@ -13,6 +13,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:seed:demo": "tsx prisma/seed.ts demo",
+    "db:seed:office": "tsx prisma/seed-office.ts",
     "db:blank": "tsx prisma/blank.ts",
     "db:reset": "prisma migrate reset --force",
     "test": "vitest run",
