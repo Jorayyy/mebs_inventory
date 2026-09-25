@@ -34,6 +34,12 @@ const prisma = new PrismaClient();
 const SEED_PASSWORD = process.env.SEED_PASSWORD ?? "ChangeMe123!";
 const RESET_PASSWORD = process.env.SEED_RESET_PASSWORD === "1";
 
+/**
+ * `tsx prisma/seed.ts`        -> bootstrap only (permissions, roles, company, admin login)
+ * `tsx prisma/seed.ts demo`   -> bootstrap + the demo dataset
+ */
+const mode: "bootstrap" | "demo" = process.argv[2] === "demo" ? "demo" : "bootstrap";
+
 const PERMISSION_GROUPS: Record<string, string> = {
   dashboard: "Overview",
   search: "Overview",
@@ -99,7 +105,7 @@ const created = {
 };
 
 async function main() {
-  console.log("Seeding BPO inventory database…");
+  console.log(mode === "demo" ? "Seeding demo dataset…" : "Bootstrapping system…");
   if (RESET_PASSWORD) console.log("SEED_RESET_PASSWORD=1 — existing users will get a new password.");
 
   const company =
@@ -151,9 +157,35 @@ async function main() {
       }
     }
   }
-  console.log(`  ${ALL_PERMISSIONS.length} permissions · ${ROLE_KEYS.length} roles`);
 
   const roles = new Map((await prisma.role.findMany()).map((r) => [r.key, r.id]));
+
+  // --- bootstrap: the one account that must always exist -------------------
+  const ADMIN = { email: "admin@mebs.local", name: "System Administrator" };
+  const adminPassword = await bcrypt.hash(SEED_PASSWORD, 12);
+  const adminRole = roles.get("SUPER_ADMIN")!;
+  const existingAdmin = await prisma.user.findUnique({ where: { email: ADMIN.email } });
+  const adminUser =
+    existingAdmin ??
+    (await prisma.user.create({
+      data: {
+        email: ADMIN.email,
+        name: ADMIN.name,
+        passwordHash: adminPassword,
+        roleId: adminRole,
+        status: "ACTIVE",
+        mustChangePassword: false,
+      },
+    }));
+  if (existingAdmin && RESET_PASSWORD) {
+    await prisma.user.update({ where: { id: adminUser.id }, data: { passwordHash: adminPassword } });
+  }
+
+  if (mode !== "demo") {
+    console.log(`  ${ALL_PERMISSIONS.length} permissions · ${ROLE_KEYS.length} roles`);
+    console.log(`  admin account: ${ADMIN.email} (password: ${RESET_PASSWORD ? "reset" : "unchanged on re-run"})`);
+    return;
+  }
 
   const siteSeeds = [
     {

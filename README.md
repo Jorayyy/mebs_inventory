@@ -40,20 +40,37 @@ only ever see their own sites (`siteScope()` Prisma helper). Users without
 npm install          # also runs `prisma generate` (postinstall)
 cp .env.example .env.local   # fill in DATABASE_URL / DIRECT_URL / AUTH_SECRET
 npm run db:migrate   # applies prisma/migrations (needs DATABASE_URL)
-npm run db:seed      # demo sites, roles, users, assets, stock, tickets
+npm run db:seed      # bootstrap only: permissions, roles, company, admin login
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000 and sign in as `admin@mebs.local` / `ChangeMe123!`.
+The system starts **empty** — create your own sites, categories and locations under
+*Organization*, then start registering assets and stock.
 
-### Seeded accounts
+Optional helpers:
 
-Password for every seeded user: `ChangeMe123!` (override with `SEED_PASSWORD`,
-reset existing hashes with `SEED_RESET_PASSWORD=1`).
+```bash
+npm run db:seed:demo   # add the demo dataset (sites, 72 assets, stock, tickets, users)
+npm run db:blank -- --yes   # wipe business data again, keeping the admin login
+```
+
+### Accounts
+
+`npm run db:seed` bootstraps one account:
 
 | Email | Role |
 | --- | --- |
 | `admin@mebs.local` | Super Admin (all 45 permissions) |
+
+Password: `ChangeMe123!` (override with `SEED_PASSWORD`, reset an existing hash with
+`SEED_RESET_PASSWORD=1`).
+
+`npm run db:seed:demo` additionally creates the demo people below — they do **not**
+exist on a blank system:
+
+| Email | Role |
+| --- | --- |
 | `inventory.admin@mebs.local` | Inventory Administrator |
 | `site.admin@mebs.local` | Site Administrator |
 | `technician@mebs.local` | IT / Technician |
@@ -75,13 +92,15 @@ reset existing hashes with `SEED_RESET_PASSWORD=1`).
 | `npm run smoke` | Boots `next start` and asserts routes/login/exports (`scripts/smoke.mjs`) |
 | `npm run db:migrate` | Create/apply migrations during development |
 | `npm run db:deploy` | Apply committed migrations (CI/Vercel) |
-| `npm run db:seed` | Seed demo data (idempotent) |
+| `npm run db:seed` | Bootstrap only: permissions, roles, company, admin login |
+| `npm run db:seed:demo` | Bootstrap + the demo dataset (idempotent) |
+| `npm run db:blank -- --yes` | Delete all business data, keep the admin login |
 | `npm run db:reset` | Drop + recreate + reseed the database |
 
 ## Project layout
 
 ```
-prisma/            schema.prisma, migrations/, seed.ts
+prisma/            schema.prisma, migrations/, seed.ts (bootstrap/demo), blank.ts
 src/
   actions/         server actions (auth + permission guarded, return ActionResult)
   app/(app)/       authenticated pages: dashboard, assets, inventory, transfers,
@@ -129,7 +148,8 @@ The repository ships with a Vercel + Neon guide below.
    - `NEXT_PUBLIC_APP_URL` — e.g. `https://inventory.vercel.app`
    - `NEXT_PUBLIC_APP_NAME` — display name
 5. Apply migrations **once** from your machine against the production database:
-   `npx prisma migrate deploy`, then `npm run db:seed` for demo data.
+   `npx prisma migrate deploy`, then `npm run db:seed` to create the admin login
+(or `npm run db:seed:demo` if you also want the demo dataset).
 6. Deploy. Log in with a seeded account and change the passwords immediately.
 
 > Neon's pooled endpoint is required on Vercel (serverless connections); the direct

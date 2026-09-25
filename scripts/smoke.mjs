@@ -55,7 +55,7 @@ function cookieHeader(jar) {
   return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
-async function login(email) {
+async function login(email, { required = true } = {}) {
   const jar = new Map();
   const csrfRes = await fetch(`${BASE}/api/auth/csrf`, { redirect: "manual" });
   collectCookies(csrfRes, jar);
@@ -78,11 +78,15 @@ async function login(email) {
   });
   const session = await sessionRes.json();
   if (session?.user?.email !== email) {
-    failures.push(`login ${email} failed (got ${session?.user?.email ?? "none"})`);
-    console.log(`  FAIL login ${email} -> ${session?.user?.email ?? "none"}`);
-  } else {
-    console.log(`  ok   login ${email}`);
+    if (required) {
+      failures.push(`login ${email} failed (got ${session?.user?.email ?? "none"})`);
+      console.log(`  FAIL login ${email} -> ${session?.user?.email ?? "none"}`);
+    } else {
+      console.log(`  skip login ${email} (account not present)`);
+    }
+    return null;
   }
+  console.log(`  ok   login ${email}`);
   return jar;
 }
 
@@ -121,28 +125,34 @@ try {
   console.log("\nadmin");
   const admin = await login("admin@mebs.local");
   let bad = 0;
-  for (const route of ADMIN_ROUTES) {
-    const res = await get(route, admin);
-    if (res.status !== 200) { bad++; failures.push(`admin GET ${route} -> ${res.status}`); console.log(`  FAIL admin GET ${route} -> ${res.status} ${res.location ?? ""}`); }
-  }
-  check(`admin: ${ADMIN_ROUTES.length - bad}/${ADMIN_ROUTES.length} routes 200`, bad === 0);
-  for (const route of EXPORT_ROUTES) {
-    const res = await get(route, admin);
-    check(`admin ${route} csv`, res.status === 200 && res.type.includes("text/csv"), `${res.status} ${res.type}`);
+  if (admin) {
+    for (const route of ADMIN_ROUTES) {
+      const res = await get(route, admin);
+      if (res.status !== 200) { bad++; failures.push(`admin GET ${route} -> ${res.status}`); console.log(`  FAIL admin GET ${route} -> ${res.status} ${res.location ?? ""}`); }
+    }
+    check(`admin: ${ADMIN_ROUTES.length - bad}/${ADMIN_ROUTES.length} routes 200`, bad === 0);
+    for (const route of EXPORT_ROUTES) {
+      const res = await get(route, admin);
+      check(`admin ${route} csv`, res.status === 200 && res.type.includes("text/csv"), `${res.status} ${res.type}`);
+    }
   }
 
   console.log("\nemployee");
-  const employee = await login("employee@mebs.local");
-  const empDash = await get("/dashboard", employee);
-  check("employee /dashboard -> /my", [307, 308].includes(empDash.status) && (empDash.location ?? "").includes("/my"), `${empDash.status} ${empDash.location}`);
-  const empMy = await get("/my", employee);
-  check("employee /my 200", empMy.status === 200, String(empMy.status));
-  const empAssets = await get("/assets", employee);
-  check("employee /assets redirects away", [302, 303, 307, 308].includes(empAssets.status), `${empAssets.status} ${empAssets.location}`);
-  const empLogin = await get("/login", employee);
-  check("employee /login redirects", [302, 303, 307, 308].includes(empLogin.status), `${empLogin.status} ${empLogin.location}`);
-  const empSettings = await get("/settings/users", employee);
-  check("employee /settings/users redirects away", [302, 303, 307, 308].includes(empSettings.status), `${empSettings.status} ${empSettings.location}`);
+  const employee = await login("employee@mebs.local", { required: false });
+  if (!employee) {
+    console.log("  skip employee checks (demo account not seeded)");
+  } else {
+    const empDash = await get("/dashboard", employee);
+    check("employee /dashboard -> /my", [307, 308].includes(empDash.status) && (empDash.location ?? "").includes("/my"), `${empDash.status} ${empDash.location}`);
+    const empMy = await get("/my", employee);
+    check("employee /my 200", empMy.status === 200, String(empMy.status));
+    const empAssets = await get("/assets", employee);
+    check("employee /assets redirects away", [302, 303, 307, 308].includes(empAssets.status), `${empAssets.status} ${empAssets.location}`);
+    const empLogin = await get("/login", employee);
+    check("employee /login redirects", [302, 303, 307, 308].includes(empLogin.status), `${empLogin.status} ${empLogin.location}`);
+    const empSettings = await get("/settings/users", employee);
+    check("employee /settings/users redirects away", [302, 303, 307, 308].includes(empSettings.status), `${empSettings.status} ${empSettings.location}`);
+  }
 
   console.log("\nserver log errors");
   const errorLines = logs.join("").split(/\r?\n/).filter((l) => /⨯|Unhandled|Error:/.test(l));
