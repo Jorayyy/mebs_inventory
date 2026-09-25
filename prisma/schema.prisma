@@ -1,0 +1,1210 @@
+// ==============================================================================
+// BPO Inventory, Asset & Equipment Management System — Prisma Schema
+// PostgreSQL (Neon) + Prisma ORM
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==============================================================================
+// ENUMS
+// ==============================================================================
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  OFFBOARDED
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  ENDING
+  EXITED
+}
+
+enum SiteStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum LocationType {
+  WAREHOUSE
+  STORAGE_ROOM
+  RACK
+  CABINET
+  BIN
+  PANTRY
+  IT_ROOM
+  MAILROOM
+  FLOOR_GENERAL
+  OTHER
+}
+
+enum TrackingMode {
+  ASSET
+  CONSUMABLE
+  BOTH
+}
+
+enum CategoryGroup {
+  IT_EQUIPMENT
+  OFFICE_EQUIPMENT
+  OFFICE_SUPPLIES
+  FACILITIES_SAFETY
+  CUSTOM
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ASSIGNED
+  IN_STORAGE
+  UNDER_MAINTENANCE
+  DAMAGED
+  LOST
+  STOLEN
+  FOR_REPAIR
+  RETIRED
+  DISPOSED
+  TRANSFERRED
+}
+
+enum AssetCondition {
+  NEW
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  RETURN_PENDING
+  RETURNED
+  DAMAGED
+  MISSING
+}
+
+enum InventoryTxType {
+  RECEIVE
+  ISSUE
+  ASSIGN
+  RETURN
+  TRANSFER
+  ADJUSTMENT
+  REPAIR
+  MAINTENANCE
+  DISPOSAL
+  WRITE_OFF
+  CONSUMPTION
+  REPLENISHMENT
+  RESERVED
+  RELEASED
+}
+
+enum StockTxType {
+  RECEIVE
+  ISSUE
+  CONSUME
+  ADJUSTMENT
+  REPLENISHMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+  WRITE_OFF
+  RESERVE
+  RELEASE
+}
+
+enum TransferStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  IN_TRANSIT
+  RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum TransferItemStatus {
+  PENDING
+  SENT
+  RECEIVED
+  DAMAGED
+  MISSING
+  CANCELLED
+}
+
+enum TransferLineType {
+  ASSET
+  CONSUMABLE
+}
+
+enum MaintenanceStatus {
+  REPORTED
+  DIAGNOSED
+  IN_REPAIR
+  AWAITING_PARTS
+  COMPLETED
+  RETURNED_TO_SERVICE
+  CANCELLED
+}
+
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum ReceivingKind {
+  ASSET
+  CONSUMABLE
+}
+
+enum DisposalMethod {
+  SALE
+  RECYCLE
+  DONATION
+  SCRAPPED
+  RETURNED_TO_VENDOR
+  OTHER
+}
+
+enum NotificationType {
+  LOW_STOCK
+  PENDING_APPROVAL
+  TRANSFER_UPDATE
+  ASSIGNMENT_RETURN_DUE
+  ASSIGNMENT_RETURNED
+  WARRANTY_EXPIRING
+  MAINTENANCE_UPDATE
+  ASSET_DAMAGED
+  ASSET_LOST
+  RECEIVING_COMPLETED
+  GENERAL
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  USER_CREATED
+  USER_UPDATED
+  USER_STATUS_CHANGED
+  ROLE_CHANGED
+  PERMISSION_CHANGED
+  ASSET_CREATED
+  ASSET_UPDATED
+  ASSET_DELETED
+  ASSET_STATUS_CHANGED
+  ASSIGNMENT_CREATED
+  ASSIGNMENT_RETURNED
+  ASSIGNMENT_ACKNOWLEDGED
+  STOCK_RECEIVED
+  STOCK_ISSUED
+  STOCK_CONSUMED
+  STOCK_ADJUSTED
+  TRANSFER_CREATED
+  TRANSFER_APPROVED
+  TRANSFER_REJECTED
+  TRANSFER_SHIPPED
+  TRANSFER_RECEIVED
+  TRANSFER_COMPLETED
+  MAINTENANCE_CREATED
+  MAINTENANCE_UPDATED
+  DISPOSAL_CREATED
+  SUPPLIER_CREATED
+  SUPPLIER_UPDATED
+  PURCHASE_ORDER_CREATED
+  ORG_UPDATED
+  CATEGORY_UPDATED
+  EXPORT_GENERATED
+  DELETION_ATTEMPTED
+  UNAUTHORIZED_ACCESS
+  SETTINGS_UPDATED
+  DIAGNOSTIC_VIEWED
+}
+
+enum DepreciationMethod {
+  NONE
+  STRAIGHT_LINE
+  DECLINING_BALANCE
+}
+
+// ==============================================================================
+// IDENTITY, AUTH & RBAC
+// ==============================================================================
+
+model Role {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  name        String
+  description String?
+  isSystem    Boolean          @default(true)
+  scope       String? // e.g. "site" for site-scoped roles
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  name        String
+  description String?
+  group       String           @default("general")
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id                 String     @id @default(cuid())
+  email              String     @unique
+  name               String
+  passwordHash       String
+  employeeNumber     String?    @unique
+  status             UserStatus @default(ACTIVE)
+  roleId             String
+  role               Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  mustChangePassword Boolean    @default(false)
+  avatarUrl          String?
+  phone              String?
+  lastLoginAt        DateTime?
+  failedAttempts     Int        @default(0)
+  lockedUntil        DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
+
+  siteScopes    UserSite[]
+  employee      Employee?
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  createdAssets Asset[]                @relation("AssetCreatedBy")
+  custodied     Asset[]                @relation("AssetCustodian")
+  transactions  AssetTransaction[]
+  stockTx       InventoryTransaction[]
+  assignments   AssetAssignment[]      @relation("AssignmentCreatedBy")
+  returns       AssetAssignment[]      @relation("AssignmentReturnedBy")
+  maintain      MaintenanceRecord[]    @relation("MaintenanceReporter")
+  repairs       MaintenanceRecord[]    @relation("MaintenanceTechnician")
+  transfersReq  Transfer[]             @relation("TransferRequestedBy")
+  transfersApp  Transfer[]             @relation("TransferApprovedBy")
+  receivings    Receiving[]
+  attachments   Attachment[]
+  settings      SystemSetting[]
+
+  @@index([roleId])
+  @@index([status])
+  @@map("users")
+}
+
+model UserSite {
+  id     String @id @default(cuid())
+  userId String
+  siteId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, siteId])
+  @@map("user_sites")
+}
+
+model Company {
+  id             String          @id @default(cuid())
+  name           String
+  legalName      String?
+  taxId          String?
+  logoUrl        String?
+  currency       String          @default("PHP")
+  sites          Site[]
+  categories     Category[]
+  employees      Employee[]
+  costCenters    CostCenter[]
+  departments    Department[]
+  inventoryItems InventoryItem[]
+  assets         Asset[]
+  settings       SystemSetting[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@map("companies")
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key         String
+  value       Json
+  description String?
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, key])
+  @@map("system_settings")
+}
+
+// ==============================================================================
+// ORGANISATION / MULTI-SITE HIERARCHY
+// ==============================================================================
+
+model Site {
+  id           String     @id @default(cuid())
+  companyId    String
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code         String
+  name         String
+  city         String?
+  address      String?
+  timezone     String     @default("Asia/Manila")
+  status       SiteStatus @default(ACTIVE)
+  contactPhone String?
+  contactEmail String?
+  notes        String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  buildings      Building[]
+  departments    Department[]
+  stockLocations StockLocation[]
+  employees      Employee[]
+  assets         Asset[]
+  userScopes     UserSite[]
+  transfersFrom  Transfer[]             @relation("TransferFromSite")
+  transfersTo    Transfer[]             @relation("TransferToSite")
+  receivings     Receiving[]
+  inventory      InventoryItem[]
+  assetTxFrom    AssetTransaction[]     @relation("TxFromSite")
+  assetTxTo      AssetTransaction[]     @relation("TxToSite")
+  purchaseOrders PurchaseOrder[]
+  stockTxFrom    InventoryTransaction[] @relation("StockTxFromSite")
+  stockTxTo      InventoryTransaction[] @relation("StockTxToSite")
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([status])
+  @@map("sites")
+}
+
+model Building {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  floors    Floor[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([siteId, code])
+  @@index([siteId])
+  @@map("buildings")
+}
+
+model Floor {
+  id         String   @id @default(cuid())
+  buildingId String
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  code       String
+  name       String
+  level      Int      @default(0)
+  rooms      Room[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([buildingId, code])
+  @@index([buildingId])
+  @@map("floors")
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  floorId   String
+  floor     Floor    @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  capacity  Int?
+  assets    Asset[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([floorId, code])
+  @@index([floorId])
+  @@map("rooms")
+}
+
+model StockLocation {
+  id          String       @id @default(cuid())
+  siteId      String
+  site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  code        String
+  name        String
+  type        LocationType @default(STORAGE_ROOM)
+  buildingId  String?
+  floorId     String?
+  roomId      String?
+  description String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  items           InventoryItem[]
+  assets          Asset[]
+  stockTxFrom     InventoryTransaction[] @relation("StockTxFromLocation")
+  stockTxTo       InventoryTransaction[] @relation("StockTxToLocation")
+  receivingSource Receiving[]
+
+  @@unique([siteId, code])
+  @@index([siteId])
+  @@index([type])
+  @@map("stock_locations")
+}
+
+model Department {
+  id           String      @id @default(cuid())
+  companyId    String
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  siteId       String
+  site         Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  code         String
+  name         String
+  description  String?
+  managerId    String?
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  teams        Team[]
+  employees    Employee[]
+  assets       Asset[]
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([siteId, code])
+  @@index([siteId])
+  @@map("departments")
+}
+
+model Team {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  code         String
+  name         String
+  leadId       String?
+  employees    Employee[]
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([departmentId, code])
+  @@index([departmentId])
+  @@map("teams")
+}
+
+model CostCenter {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  budget    Decimal? @db.Decimal(14, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  departments Department[]
+  assets      Asset[]
+
+  @@unique([companyId, code])
+  @@map("cost_centers")
+}
+
+model Employee {
+  id               String           @id @default(cuid())
+  companyId        String
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeNo       String
+  userId           String?          @unique
+  user             User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  siteId           String
+  site             Site             @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  departmentId     String
+  department       Department       @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  teamId           String?
+  team             Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
+  jobTitle         String?
+  employmentStatus EmploymentStatus @default(ACTIVE)
+  hireDate         DateTime?
+  exitDate         DateTime?
+  managerId        String?
+  manager          Employee?        @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  directReports    Employee[]       @relation("EmployeeManager")
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+
+  assignedAssets Asset[]
+  assignments    AssetAssignment[]
+  assetsReceived AssetTransaction[] @relation("TxReceivedEmployee")
+  assetsReturned AssetTransaction[] @relation("TxReturnedEmployee")
+
+  @@unique([companyId, employeeNo])
+  @@index([siteId])
+  @@index([departmentId])
+  @@index([employmentStatus])
+  @@index([lastName])
+  @@map("employees")
+}
+
+// ==============================================================================
+// CATALOG: CATEGORIES & ITEM TYPES
+// ==============================================================================
+
+model Category {
+  id           String        @id @default(cuid())
+  companyId    String
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  slug         String
+  group        CategoryGroup @default(CUSTOM)
+  trackingMode TrackingMode  @default(BOTH)
+  tagPrefix    String? // e.g. "MON", "LAP"
+  parentId     String?
+  parent       Category?     @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Category[]    @relation("CategoryTree")
+  description  String?
+  icon         String?
+  isActive     Boolean       @default(true)
+  sortOrder    Int           @default(0)
+  isSystem     Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  itemTypes ItemType[]
+  assets    Asset[]
+  inventory InventoryItem[]
+
+  @@unique([companyId, slug])
+  @@index([companyId])
+  @@index([group])
+  @@map("categories")
+}
+
+model ItemType {
+  id                    String         @id @default(cuid())
+  categoryId            String
+  category              Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name                  String
+  slug                  String
+  tagPrefix             String?
+  defaultWarrantyMonths Int?
+  defaultCondition      AssetCondition @default(GOOD)
+  attributes            Json? // custom attribute template
+  isActive              Boolean        @default(true)
+  sortOrder             Int            @default(0)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  assets    Asset[]
+  inventory InventoryItem[]
+
+  @@unique([categoryId, slug])
+  @@index([categoryId])
+  @@map("item_types")
+}
+
+// ==============================================================================
+// SUPPLIERS & PROCUREMENT
+// ==============================================================================
+
+model Supplier {
+  id               String         @id @default(cuid())
+  name             String
+  contactPerson    String?
+  email            String?
+  phone            String?
+  website          String?
+  address          String?
+  taxId            String?
+  productsSupplied String?
+  notes            String?
+  status           SupplierStatus @default(ACTIVE)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  assets         Asset[]
+  inventoryItems InventoryItem[]
+  purchaseOrders PurchaseOrder[]
+  receivings     Receiving[]
+  maintenance    MaintenanceRecord[]
+
+  @@index([status])
+  @@index([name])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id            String              @id @default(cuid())
+  poNumber      String
+  supplierId    String
+  supplier      Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  siteId        String
+  site          Site                @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  status        PurchaseOrderStatus @default(DRAFT)
+  orderDate     DateTime            @default(now())
+  expectedDate  DateTime?
+  requestedById String?
+  approvedById  String?
+  currency      String              @default("PHP")
+  subtotal      Decimal             @default(0) @db.Decimal(14, 2)
+  taxAmount     Decimal             @default(0) @db.Decimal(14, 2)
+  totalAmount   Decimal             @default(0) @db.Decimal(14, 2)
+  notes         String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  items      PurchaseOrderItem[]
+  receivings Receiving[]
+
+  @@unique([supplierId, poNumber])
+  @@index([siteId])
+  @@index([status])
+  @@index([orderDate])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  categoryId      String?
+  itemTypeId      String?
+  description     String
+  quantity        Int
+  receivedQty     Int           @default(0)
+  unitCost        Decimal       @db.Decimal(14, 2)
+  totalCost       Decimal       @db.Decimal(14, 2)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([purchaseOrderId])
+  @@map("purchase_order_items")
+}
+
+model Receiving {
+  id              String         @id @default(cuid())
+  receiptNumber   String         @unique
+  poId            String?
+  po              PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+  supplierId      String?
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  siteId          String
+  site            Site           @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  stockLocationId String?
+  stockLocation   StockLocation? @relation(fields: [stockLocationId], references: [id], onDelete: SetNull)
+  departmentId    String?
+  receivedById    String
+  receivedBy      User           @relation(fields: [receivedById], references: [id], onDelete: Restrict)
+  deliveryDate    DateTime       @default(now())
+  invoiceNumber   String?
+  referenceNumber String?
+  totalCost       Decimal        @default(0) @db.Decimal(14, 2)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  items  ReceivingItem[]
+  assets Asset[]
+
+  @@index([siteId])
+  @@index([supplierId])
+  @@index([deliveryDate])
+  @@map("receivings")
+}
+
+model ReceivingItem {
+  id              String        @id @default(cuid())
+  receivingId     String
+  receiving       Receiving     @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  kind            ReceivingKind @default(ASSET)
+  categoryId      String?
+  itemTypeId      String?
+  description     String
+  quantity        Int
+  unitCost        Decimal       @default(0) @db.Decimal(14, 2)
+  totalCost       Decimal       @default(0) @db.Decimal(14, 2)
+  serialNumbers   String[]      @default([])
+  assetIds        String[]      @default([])
+  inventoryItemId String?
+  createdAt       DateTime      @default(now())
+
+  @@index([receivingId])
+  @@map("receiving_items")
+}
+
+// ==============================================================================
+// ASSETS
+// ==============================================================================
+
+model Asset {
+  id           String    @id @default(cuid())
+  companyId    String
+  assetTag     String
+  barcode      String?   @unique
+  qrCode       String?   @unique
+  serialNumber String?
+  name         String
+  description  String?
+  categoryId   String
+  category     Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  itemTypeId   String?
+  itemType     ItemType? @relation(fields: [itemTypeId], references: [id], onDelete: SetNull)
+
+  manufacturer String?
+  brand        String?
+  model        String?
+
+  purchaseDate  DateTime?
+  purchasePrice Decimal?    @db.Decimal(14, 2)
+  currency      String      @default("PHP")
+  supplierId    String?
+  supplier      Supplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  receivingId   String?
+  receiving     Receiving?  @relation(fields: [receivingId], references: [id], onDelete: SetNull)
+  costCenterId  String?
+  costCenter    CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+
+  warrantyStart  DateTime?
+  warrantyEnd    DateTime?
+  warrantyMonths Int?
+
+  siteId          String
+  site            Site           @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  buildingId      String?
+  floorId         String?
+  roomId          String?
+  room            Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  stockLocationId String?
+  stockLocation   StockLocation? @relation(fields: [stockLocationId], references: [id], onDelete: SetNull)
+  departmentId    String?
+  department      Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  assignedEmployeeId String?
+  assignedEmployee   Employee? @relation(fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  custodianUserId    String?
+  custodian          User?     @relation("AssetCustodian", fields: [custodianUserId], references: [id], onDelete: SetNull)
+  createdById        String?
+  createdBy          User?     @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  status    AssetStatus    @default(IN_STORAGE)
+  condition AssetCondition @default(GOOD)
+
+  depreciationMethod DepreciationMethod @default(NONE)
+  salvageValue       Decimal?           @db.Decimal(14, 2)
+  usefulLifeMonths   Int?
+
+  notes      String?
+  isActive   Boolean   @default(true)
+  receivedAt DateTime?
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  assignments   AssetAssignment[]
+  transactions  AssetTransaction[]
+  maintenance   MaintenanceRecord[]
+  disposal      DisposalRecord?
+  transferItems TransferAsset[]
+
+  @@unique([companyId, assetTag])
+  @@unique([companyId, serialNumber])
+  @@index([siteId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([condition])
+  @@index([assignedEmployeeId])
+  @@index([departmentId])
+  @@index([warrantyEnd])
+  @@index([createdAt])
+  @@index([name])
+  @@index([model])
+  @@map("assets")
+}
+
+model AssetAssignment {
+  id                    String           @id @default(cuid())
+  assetId               String
+  asset                 Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employeeId            String
+  employee              Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assignedById          String
+  assignedBy            User             @relation("AssignmentCreatedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+  assignedAt            DateTime         @default(now())
+  siteId                String?
+  departmentId          String?
+  conditionAtAssignment AssetCondition   @default(GOOD)
+  expectedReturnAt      DateTime?
+  status                AssignmentStatus @default(ACTIVE)
+  notes                 String?
+  acknowledgedAt        DateTime?
+  returnedAt            DateTime?
+  returnedById          String?
+  returnedBy            User?            @relation("AssignmentReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
+  returnCondition       AssetCondition?
+  returnNotes           String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([employeeId, status])
+  @@index([assetId])
+  @@index([status])
+  @@index([expectedReturnAt])
+  @@map("asset_assignments")
+}
+
+/// Immutable per-asset audit ledger. Never updated or deleted by application code.
+model AssetTransaction {
+  id             String          @id @default(cuid())
+  assetId        String
+  asset          Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  type           InventoryTxType
+  fromStatus     AssetStatus?
+  toStatus       AssetStatus?
+  fromSiteId     String?
+  fromSite       Site?           @relation("TxFromSite", fields: [fromSiteId], references: [id], onDelete: SetNull)
+  toSiteId       String?
+  toSite         Site?           @relation("TxToSite", fields: [toSiteId], references: [id], onDelete: SetNull)
+  fromRoomId     String?
+  toRoomId       String?
+  fromEmployeeId String?
+  fromEmployee   Employee?       @relation("TxReturnedEmployee", fields: [fromEmployeeId], references: [id], onDelete: SetNull)
+  toEmployeeId   String?
+  toEmployee     Employee?       @relation("TxReceivedEmployee", fields: [toEmployeeId], references: [id], onDelete: SetNull)
+  performedById  String?
+  performedBy    User?           @relation(fields: [performedById], references: [id], onDelete: SetNull)
+  referenceType  String?
+  referenceId    String?
+  previousValue  Json?
+  newValue       Json?
+  notes          String?
+  createdAt      DateTime        @default(now())
+
+  @@index([assetId, createdAt])
+  @@index([type])
+  @@index([performedById])
+  @@index([createdAt])
+  @@index([toSiteId])
+  @@map("asset_transactions")
+}
+
+model MaintenanceRecord {
+  id            String            @id @default(cuid())
+  assetId       String
+  asset         Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  referenceNo   String            @unique
+  issue         String
+  reportedById  String
+  reportedBy    User              @relation("MaintenanceReporter", fields: [reportedById], references: [id], onDelete: Restrict)
+  technicianId  String?
+  technician    User?             @relation("MaintenanceTechnician", fields: [technicianId], references: [id], onDelete: SetNull)
+  vendorId      String?
+  vendor        Supplier?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  status        MaintenanceStatus @default(REPORTED)
+  diagnosis     String?
+  repairAction  String?
+  partsUsed     String?
+  cost          Decimal           @default(0) @db.Decimal(14, 2)
+  warrantyClaim Boolean           @default(false)
+  reportedAt    DateTime          @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  returnedAt    DateTime?
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([assetId])
+  @@index([status])
+  @@index([reportedAt])
+  @@map("maintenance_records")
+}
+
+model DisposalRecord {
+  id           String         @id @default(cuid())
+  assetId      String         @unique
+  asset        Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  reason       String
+  method       DisposalMethod
+  approvedById String?
+  disposedAt   DateTime       @default(now())
+  proceeds     Decimal?       @db.Decimal(14, 2)
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([disposedAt])
+  @@map("disposal_records")
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  entityType   String
+  entityId     String
+  filename     String
+  url          String
+  mimeType     String
+  size         Int
+  kind         String   @default("document") // document | photo | invoice | label
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("attachments")
+}
+
+// ==============================================================================
+// CONSUMABLE INVENTORY
+// ==============================================================================
+
+model InventoryItem {
+  id              String        @id @default(cuid())
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sku             String
+  name            String
+  description     String?
+  categoryId      String
+  category        Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  itemTypeId      String?
+  itemType        ItemType?     @relation(fields: [itemTypeId], references: [id], onDelete: SetNull)
+  siteId          String
+  site            Site          @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  stockLocationId String
+  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id], onDelete: Restrict)
+  binLocation     String?
+  unit            String        @default("EACH")
+  currentQty      Decimal       @default(0) @db.Decimal(14, 3)
+  reservedQty     Decimal       @default(0) @db.Decimal(14, 3)
+  minQty          Decimal       @default(0) @db.Decimal(14, 3)
+  maxQty          Decimal?      @db.Decimal(14, 3)
+  reorderLevel    Decimal       @default(0) @db.Decimal(14, 3)
+  unitCost        Decimal       @default(0) @db.Decimal(14, 2)
+  supplierId      String?
+  supplier        Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  isActive        Boolean       @default(true)
+  lastMovementAt  DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  transactions  InventoryTransaction[]
+  transferItems TransferItem[]
+
+  @@unique([companyId, sku, siteId, stockLocationId])
+  @@index([siteId])
+  @@index([stockLocationId])
+  @@index([categoryId])
+  @@index([name])
+  @@map("inventory_items")
+}
+
+/// Immutable stock ledger. quantity is signed; balanceAfter is the running balance.
+model InventoryTransaction {
+  id              String         @id @default(cuid())
+  inventoryItemId String
+  inventoryItem   InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  type            StockTxType
+  quantity        Decimal        @db.Decimal(14, 3)
+  balanceAfter    Decimal        @db.Decimal(14, 3)
+  unitCost        Decimal?       @db.Decimal(14, 2)
+  fromSiteId      String?
+  fromSite        Site?          @relation("StockTxFromSite", fields: [fromSiteId], references: [id], onDelete: SetNull)
+  toSiteId        String?
+  toSite          Site?          @relation("StockTxToSite", fields: [toSiteId], references: [id], onDelete: SetNull)
+  fromLocationId  String?
+  fromLocation    StockLocation? @relation("StockTxFromLocation", fields: [fromLocationId], references: [id], onDelete: SetNull)
+  toLocationId    String?
+  toLocation      StockLocation? @relation("StockTxToLocation", fields: [toLocationId], references: [id], onDelete: SetNull)
+  performedById   String?
+  performedBy     User?          @relation(fields: [performedById], references: [id], onDelete: SetNull)
+  referenceType   String?
+  referenceId     String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+
+  @@index([inventoryItemId, createdAt])
+  @@index([type])
+  @@index([createdAt])
+  @@index([performedById])
+  @@map("inventory_transactions")
+}
+
+// ==============================================================================
+// TRANSFERS
+// ==============================================================================
+
+model Transfer {
+  id              String         @id @default(cuid())
+  transferNumber  String         @unique
+  fromSiteId      String
+  fromSite        Site           @relation("TransferFromSite", fields: [fromSiteId], references: [id], onDelete: Restrict)
+  toSiteId        String
+  toSite          Site           @relation("TransferToSite", fields: [toSiteId], references: [id], onDelete: Restrict)
+  fromLocationId  String?
+  toLocationId    String?
+  status          TransferStatus @default(DRAFT)
+  requestedById   String
+  requestedBy     User           @relation("TransferRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedById    String?
+  approvedBy      User?          @relation("TransferApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  requestedAt     DateTime       @default(now())
+  approvedAt      DateTime?
+  shippedAt       DateTime?
+  expectedArrival DateTime?
+  actualArrival   DateTime?
+  courier         String?
+  referenceNumber String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  assets TransferAsset[]
+  items  TransferItem[]
+
+  @@index([fromSiteId])
+  @@index([toSiteId])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("transfers")
+}
+
+model TransferAsset {
+  id                 String             @id @default(cuid())
+  transferId         String
+  transfer           Transfer           @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  assetId            String
+  asset              Asset              @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  status             TransferItemStatus @default(PENDING)
+  conditionAtSend    AssetCondition?
+  conditionAtReceive AssetCondition?
+  receivedAt         DateTime?
+  notes              String?
+  createdAt          DateTime           @default(now())
+
+  @@unique([transferId, assetId])
+  @@index([assetId])
+  @@index([status])
+  @@map("transfer_assets")
+}
+
+model TransferItem {
+  id               String             @id @default(cuid())
+  transferId       String
+  transfer         Transfer           @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  inventoryItemId  String
+  inventoryItem    InventoryItem      @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  quantity         Decimal            @db.Decimal(14, 3)
+  receivedQuantity Decimal?           @db.Decimal(14, 3)
+  status           TransferItemStatus @default(PENDING)
+  receivedAt       DateTime?
+  notes            String?
+  createdAt        DateTime           @default(now())
+
+  @@unique([transferId, inventoryItemId])
+  @@index([inventoryItemId])
+  @@map("transfer_items")
+}
+
+// ==============================================================================
+// AUDIT & NOTIFICATIONS
+// ==============================================================================
+
+model AuditLog {
+  id            String      @id @default(cuid())
+  userId        String?
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action        AuditAction
+  entityType    String
+  entityId      String?
+  siteId        String?
+  description   String?
+  previousValue Json?
+  newValue      Json?
+  ip            String?
+  userAgent     String?
+  requestId     String?
+  createdAt     DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?
+  link       String?
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
