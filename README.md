@@ -41,17 +41,18 @@ npm install          # also runs `prisma generate` (postinstall)
 cp .env.example .env.local   # fill in DATABASE_URL / DIRECT_URL / AUTH_SECRET
 npm run db:migrate   # applies prisma/migrations (needs DATABASE_URL)
 npm run db:seed      # bootstrap only: permissions, roles, company, admin login
+npm run db:seed:office   # recommended starter: 2 sites, 48 assets, 21 stock items
 npm run dev
 ```
 
 Open http://localhost:3000 and sign in as `admin@mebs.local` / `ChangeMe123!`.
-The system starts **empty** — create your own sites, categories and locations under
-*Organization*, then start registering assets and stock.
+`npm run db:seed` leaves the system **empty**; `npm run db:seed:office` adds a small
+realistic starter set (rename the sites under *Organization* to match your offices).
 
 Optional helpers:
 
 ```bash
-npm run db:seed:demo   # add the demo dataset (sites, 72 assets, stock, tickets, users)
+npm run db:seed:demo   # add the full demo dataset (3 sites, 72 assets, stock, tickets, users)
 npm run db:blank -- --yes   # wipe business data again, keeping the admin login
 ```
 
@@ -93,14 +94,15 @@ exist on a blank system:
 | `npm run db:migrate` | Create/apply migrations during development |
 | `npm run db:deploy` | Apply committed migrations (CI/Vercel) |
 | `npm run db:seed` | Bootstrap only: permissions, roles, company, admin login |
-| `npm run db:seed:demo` | Bootstrap + the demo dataset (idempotent) |
+| `npm run db:seed:office` | Office starter dataset: 2 sites, 48 assets, 21 stock items (idempotent) |
+| `npm run db:seed:demo` | Bootstrap + the full demo dataset (idempotent) |
 | `npm run db:blank -- --yes` | Delete all business data, keep the admin login |
 | `npm run db:reset` | Drop + recreate + reseed the database |
 
 ## Project layout
 
 ```
-prisma/            schema.prisma, migrations/, seed.ts (bootstrap/demo), blank.ts
+prisma/            schema.prisma, migrations/, seed.ts (bootstrap/demo), seed-office.ts, blank.ts
 src/
   actions/         server actions (auth + permission guarded, return ActionResult)
   app/(app)/       authenticated pages: dashboard, assets, inventory, transfers,
@@ -148,8 +150,9 @@ The repository ships with a Vercel + Neon guide below.
    - `NEXT_PUBLIC_APP_URL` — e.g. `https://inventory.vercel.app`
    - `NEXT_PUBLIC_APP_NAME` — display name
 5. Apply migrations **once** from your machine against the production database:
-   `npx prisma migrate deploy`, then `npm run db:seed` to create the admin login
-(or `npm run db:seed:demo` if you also want the demo dataset).
+    `npx prisma migrate deploy`, then `npm run db:seed` to create the admin login
+ (optionally `npm run db:seed:office` for the starter dataset, or
+ `npm run db:seed:demo` for the full demo data).
 6. Deploy. Log in with a seeded account and change the passwords immediately.
 
 > Neon's pooled endpoint is required on Vercel (serverless connections); the direct
