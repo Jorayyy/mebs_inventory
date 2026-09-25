@@ -23,13 +23,29 @@ export type NavItem = {
   href: string;
   permission: PermissionKey;
   icon: React.ComponentType<{ className?: string }>;
-  match?: string[];
 };
 
 export type NavGroup = {
   label: string;
   items: NavItem[];
 };
+
+/**
+ * Which nav entry a pathname belongs to: the longest href that covers it on a
+ * path-segment boundary. Keeps `/inventory` from staying lit while you are on
+ * `/inventory/receive` (a sibling entry), while `/assets/abc` still lights
+ * `/assets`.
+ */
+export function resolveActiveHref(pathname: string, hrefs: string[]): string {
+  let active = "";
+  for (const href of hrefs) {
+    if (!href) continue;
+    const covered =
+      pathname === href || pathname.startsWith(href === "/" ? "/" : `${href}/`);
+    if (covered && href.length > active.length) active = href;
+  }
+  return active;
+}
 
 const p = NAV_PERMISSIONS;
 

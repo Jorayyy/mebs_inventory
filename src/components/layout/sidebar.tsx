@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS } from "@/components/layout/nav-config";
+import { NAV_GROUPS, resolveActiveHref } from "@/components/layout/nav-config";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,6 +31,11 @@ export function Sidebar({
         items: group.items.filter((item) => permissions.includes(item.permission)),
       })).filter((group) => group.items.length > 0),
     [permissions]
+  );
+
+  const activeHref = React.useMemo(
+    () => resolveActiveHref(pathname, groups.flatMap((group) => group.items.map((i) => i.href))),
+    [groups, pathname]
   );
 
   return (
@@ -75,9 +80,7 @@ export function Sidebar({
               )}
               <ul className="space-y-0.5">
                 {group.items.map((item) => {
-                  const active =
-                    pathname === item.href ||
-                    (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                  const active = item.href === activeHref;
                   const Icon = item.icon;
                   return (
                     <li key={item.href}>
