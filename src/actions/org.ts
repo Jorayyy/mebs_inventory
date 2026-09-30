@@ -110,13 +110,18 @@ const companySchema = z.object({
   currency: text(8, "Currency"),
 });
 
-const settingsSchema = z.object({
+/** Address of record + formatting locale. */
+const regionalSchema = z.object({
   addressLine1: optionalText(200),
   city: optionalText(80),
   region: optionalText(80),
   postalCode: optionalText(20),
   country: optionalText(80),
   locale: text(20, "Locale"),
+});
+
+/** Alerting windows applied across stock and warranty screens. */
+const defaultsSchema = z.object({
   lowStockThreshold: z.coerce.number().int().min(0).max(1_000_000),
   warrantyWarningDays: z.coerce.number().int().min(1).max(3650),
 });
@@ -195,7 +200,7 @@ export async function saveSite(raw: unknown): Promise<ActionResult<{ id: string 
         await auditOrg(user, "Site", created.id, `Created site ${created.name} (${created.code})`, created.id, null, { code, name: data.name });
       }
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       revalidatePath("/employees");
       return { id: siteId };
     },
@@ -224,7 +229,7 @@ export async function setSiteStatus(raw: unknown): Promise<ActionResult<{ id: st
         { status: input.status }
       );
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       return { id: site.id, status: input.status };
     },
     { action: "setSiteStatus" }
@@ -250,7 +255,7 @@ export async function createBuilding(raw: unknown): Promise<ActionResult<{ id: s
       });
       await auditOrg(user, "Building", building.id, `Created building ${building.name} (${code})`, input.siteId, null, { code, name: input.name });
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       return { id: building.id };
     },
     { action: "createBuilding" }
@@ -282,7 +287,7 @@ export async function createFloor(raw: unknown): Promise<ActionResult<{ id: stri
       });
       await auditOrg(user, "Floor", floor.id, `Created floor ${floor.name} in ${building.name}`, building.siteId, null, { code, level: input.level });
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       return { id: floor.id };
     },
     { action: "createFloor" }
@@ -321,7 +326,7 @@ export async function createRoom(raw: unknown): Promise<ActionResult<{ id: strin
       });
       await auditOrg(user, "Room", room.id, `Created room ${room.name} (${code})`, floor.building.siteId, null, { code, name: input.name });
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       return { id: room.id };
     },
     { action: "createRoom" }
@@ -365,7 +370,7 @@ export async function saveStockLocation(raw: unknown): Promise<ActionResult<{ id
         await auditOrg(user, "StockLocation", created.id, `Created stock location ${created.name}`, input.siteId, null, data);
       }
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       revalidatePath("/inventory");
       return { id: locationId };
     },
@@ -397,7 +402,7 @@ export async function setStockLocationActive(raw: unknown): Promise<ActionResult
         { isActive: input.isActive }
       );
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       revalidatePath("/inventory");
       return { id: location.id, isActive: input.isActive };
     },
@@ -445,7 +450,7 @@ export async function saveDepartment(raw: unknown): Promise<ActionResult<{ id: s
         await auditOrg(user, "Department", created.id, `Created department ${created.name}`, input.siteId, null, data);
       }
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       revalidatePath("/employees");
       return { id: departmentId };
     },
@@ -477,7 +482,7 @@ export async function setDepartmentActive(raw: unknown): Promise<ActionResult<{ 
         { isActive: input.isActive }
       );
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       revalidatePath("/employees");
       return { id: department.id, isActive: input.isActive };
     },
@@ -510,7 +515,7 @@ export async function createTeam(raw: unknown): Promise<ActionResult<{ id: strin
       });
       await auditOrg(user, "Team", team.id, `Created team ${team.name} under ${department.name}`, department.siteId, null, { code, name: input.name });
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       revalidatePath("/employees");
       return { id: team.id };
     },
@@ -542,7 +547,7 @@ export async function setTeamActive(raw: unknown): Promise<ActionResult<{ id: st
         { isActive: input.isActive }
       );
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       return { id: team.id, isActive: input.isActive };
     },
     { action: "setTeamActive" }
@@ -586,7 +591,7 @@ export async function saveCostCenter(raw: unknown): Promise<ActionResult<{ id: s
         await auditOrg(user, "CostCenter", created.id, `Created cost centre ${created.name}`, null, null, data);
       }
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       revalidatePath("/assets");
       return { id: costCenterId };
     },
@@ -620,7 +625,7 @@ export async function saveCompany(raw: unknown): Promise<ActionResult<{ id: stri
         await auditOrg(user, "Company", created.id, `Created company profile ${data.name}`, null, null, { name: data.name });
       }
 
-      revalidatePath("/settings/organization");
+      revalidatePath("/settings/organization", "layout");
       return { id: companyId };
     },
     { action: "saveCompany" }
@@ -628,14 +633,55 @@ export async function saveCompany(raw: unknown): Promise<ActionResult<{ id: stri
 }
 
 /** Upserts the organisation-wide SystemSetting rows (address, locale, thresholds). */
-export async function saveSystemSettings(raw: unknown): Promise<ActionResult<{ updated: string[] }>> {
+async function writeSystemSettings(
+  user: { id: string },
+  payload: { key: string; value: Prisma.InputJsonValue; description: string }[]
+): Promise<{ updated: string[] }> {
+  const companyId = await resolveCompanyId();
+
+  const previous = await prisma.systemSetting.findMany({
+    where: { companyId, key: { in: payload.map((p) => p.key) } },
+    select: { key: true, value: true },
+  });
+  const previousMap = Object.fromEntries(previous.map((row) => [row.key, row.value]));
+
+  for (const entry of payload) {
+    await prisma.systemSetting.upsert({
+      where: { companyId_key: { companyId, key: entry.key } },
+      create: {
+        companyId,
+        key: entry.key,
+        value: entry.value,
+        description: entry.description,
+        updatedById: user.id,
+      },
+      update: { value: entry.value, description: entry.description, updatedById: user.id },
+    });
+  }
+
+  await recordAudit({
+    userId: user.id,
+    action: "SETTINGS_UPDATED",
+    entityType: "SystemSetting",
+    entityId: companyId,
+    description: `Updated system settings: ${payload.map((p) => p.key).join(", ")}`,
+    previousValue: previousMap as Record<string, unknown>,
+    newValue: Object.fromEntries(payload.map((p) => [p.key, p.value])),
+    ip: await getClientIp(),
+  });
+
+  revalidatePath("/settings/organization", "layout");
+  return { updated: payload.map((p) => p.key) };
+}
+
+/** Upserts the address of record and the default formatting locale. */
+export async function saveRegionalSettings(raw: unknown): Promise<ActionResult<{ updated: string[] }>> {
   return withAction(
     async () => {
       const user = await requirePermission(PERMISSIONS.ORG_MANAGE);
-      const input = settingsSchema.parse(raw);
-      const companyId = await resolveCompanyId();
+      const input = regionalSchema.parse(raw);
 
-      const payload: { key: string; value: Prisma.InputJsonValue; description: string }[] = [
+      return await writeSystemSettings(user, [
         {
           key: "address",
           value: {
@@ -648,44 +694,32 @@ export async function saveSystemSettings(raw: unknown): Promise<ActionResult<{ u
           description: "Registered / postal address of the company",
         },
         { key: "locale", value: input.locale, description: "Default locale for formatting" },
-        { key: "lowStockThreshold", value: input.lowStockThreshold, description: "Default reorder alert threshold for new items" },
-        { key: "warrantyWarningDays", value: input.warrantyWarningDays, description: "Days before warranty expiry to raise a warning" },
-      ];
-
-      const previous = await prisma.systemSetting.findMany({
-        where: { companyId, key: { in: payload.map((p) => p.key) } },
-        select: { key: true, value: true },
-      });
-      const previousMap = Object.fromEntries(previous.map((row) => [row.key, row.value]));
-
-      for (const entry of payload) {
-        await prisma.systemSetting.upsert({
-          where: { companyId_key: { companyId, key: entry.key } },
-          create: {
-            companyId,
-            key: entry.key,
-            value: entry.value,
-            description: entry.description,
-            updatedById: user.id,
-          },
-          update: { value: entry.value, description: entry.description, updatedById: user.id },
-        });
-      }
-
-      await recordAudit({
-        userId: user.id,
-        action: "SETTINGS_UPDATED",
-        entityType: "SystemSetting",
-        entityId: companyId,
-        description: `Updated system settings: ${payload.map((p) => p.key).join(", ")}`,
-        previousValue: previousMap as Record<string, unknown>,
-        newValue: Object.fromEntries(payload.map((p) => [p.key, p.value])),
-        ip: await getClientIp(),
-      });
-
-      revalidatePath("/settings/organization");
-      return { updated: payload.map((p) => p.key) };
+      ]);
     },
-    { action: "saveSystemSettings" }
+    { action: "saveRegionalSettings" }
+  );
+}
+
+/** Upserts the alerting windows used by stock and warranty screens. */
+export async function saveInventoryDefaults(raw: unknown): Promise<ActionResult<{ updated: string[] }>> {
+  return withAction(
+    async () => {
+      const user = await requirePermission(PERMISSIONS.ORG_MANAGE);
+      const input = defaultsSchema.parse(raw);
+
+      return await writeSystemSettings(user, [
+        {
+          key: "lowStockThreshold",
+          value: input.lowStockThreshold,
+          description: "Default reorder alert threshold for new items",
+        },
+        {
+          key: "warrantyWarningDays",
+          value: input.warrantyWarningDays,
+          description: "Days before warranty expiry to raise a warning",
+        },
+      ]);
+    },
+    { action: "saveInventoryDefaults" }
   );
 }

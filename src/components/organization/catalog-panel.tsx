@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/page-header";
 import { createCategory, createItemType } from "@/actions/catalog";
-import type { OrgCategory } from "@/components/organization/organization-view";
+import type { OrgCategory } from "@/lib/organization-types";
 
 const GROUPS = [
   "IT_EQUIPMENT",
@@ -122,7 +122,8 @@ export function CatalogPanel({
             <div>
               <CardTitle>Categories &amp; item types</CardTitle>
               <CardDescription>
-                Categories drive tag prefixes, tracking mode and form options across the system.
+                Categories decide how something is tracked; item types are the specific models nested
+                underneath.
               </CardDescription>
             </div>
             {canCatalog &&

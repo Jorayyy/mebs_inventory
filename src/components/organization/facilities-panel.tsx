@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/page-header";
 import { createBuilding, createFloor, createRoom } from "@/actions/org";
-import type { OrgBuilding, OrgSite } from "@/components/organization/organization-view";
+import type { OrgBuilding, OrgSite } from "@/lib/organization-types";
 
 type Mode = "building" | "floor" | "room";
 
@@ -107,8 +107,8 @@ export function FacilitiesPanel({
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle>Buildings, floors &amp; rooms</CardTitle>
-            <CardDescription>Room codes resolve to asset placement and scan results.</CardDescription>
+            <CardTitle>Places: buildings, floors &amp; rooms</CardTitle>
+            <CardDescription>Where assets sit — room codes resolve to placement and scan results.</CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="w-[220px]">

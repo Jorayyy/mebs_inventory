@@ -18,7 +18,7 @@ import {
 import { EmptyState } from "@/components/shared/page-header";
 import { saveStockLocation, setStockLocationActive } from "@/actions/org";
 import type { ActionResult } from "@/lib/errors";
-import type { OrgLocation, OrgSite } from "@/components/organization/organization-view";
+import type { OrgLocation, OrgSite } from "@/lib/organization-types";
 
 const LOCATION_TYPES = [
   "WAREHOUSE",
@@ -132,9 +132,9 @@ export function LocationsPanel({
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle>Stock locations</CardTitle>
+            <CardTitle>Storage locations</CardTitle>
             <CardDescription>
-              Warehouses, racks and bins where inventory is received and stored.
+              Warehouses, racks and bins where counted stock is received and stored.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">

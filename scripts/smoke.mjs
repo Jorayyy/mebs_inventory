@@ -13,6 +13,9 @@ const ADMIN_ROUTES = [
   "/transfers", "/transfers/new", "/assignments", "/assignments/clearance",
   "/maintenance", "/maintenance/new", "/reports", "/audit", "/notifications",
   "/employees", "/employees/new", "/settings/organization", "/settings/users",
+  "/settings/organization/company", "/settings/organization/sites",
+  "/settings/organization/locations", "/settings/organization/departments",
+  "/settings/organization/catalog",
   "/settings/users/new", "/admin/diagnostics", "/my", "/search",
 ];
 const EXPORT_ROUTES = [

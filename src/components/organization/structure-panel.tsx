@@ -28,7 +28,7 @@ import type {
   OrgCostCenter,
   OrgDepartment,
   OrgSite,
-} from "@/components/organization/organization-view";
+} from "@/lib/organization-types";
 
 type DeptValues = {
   id: string;

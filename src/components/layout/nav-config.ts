@@ -69,15 +69,15 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "Procurement & People",
+    label: "People",
     items: [
-      { label: "Suppliers", href: "/suppliers", permission: p.suppliers, icon: Truck },
       { label: "Employees", href: "/employees", permission: p.employees, icon: Users },
       { label: "My Assets", href: "/my", permission: p.selfservice, icon: UserCheck },
+      { label: "Suppliers", href: "/suppliers", permission: p.suppliers, icon: Truck },
     ],
   },
   {
-    label: "Insights",
+    label: "Reports",
     items: [
       { label: "Reports", href: "/reports", permission: p.reports, icon: FileBarChart2 },
       { label: "Audit Trail", href: "/audit", permission: p.audit, icon: ScrollText },

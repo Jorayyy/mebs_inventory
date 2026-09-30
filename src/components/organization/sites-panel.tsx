@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { saveSite, setSiteStatus } from "@/actions/org";
-import type { OrgSite } from "@/components/organization/organization-view";
+import type { OrgSite } from "@/lib/organization-types";
 
 export const SITE_STATUS: Record<string, { label: string; tone: "success" | "muted" }> = {
   ACTIVE: { label: "Active", tone: "success" },
