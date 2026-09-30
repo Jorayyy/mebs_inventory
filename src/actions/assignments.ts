@@ -7,6 +7,7 @@ import { AppError, withAction, type ActionResult } from "@/lib/errors";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/permissions";
 import { notify } from "@/lib/notify";
+import { returnAssetStatus, isTerminal } from "@/lib/lifecycle";
 import { z } from "zod";
 
 const returnSchema = z.object({
@@ -43,8 +44,16 @@ export async function returnAssets(raw: unknown): Promise<ActionResult<{ process
       if (assignments.length === 0) throw new AppError("No open assignments matched.");
       assignments.forEach((a) => assertSiteAccess(user, a.asset.siteId));
 
-      const nextAssetStatus =
-        input.outcome === "MISSING" ? "LOST" : input.outcome === "DAMAGED" ? "DAMAGED" : "AVAILABLE";
+      const disposed = assignments.filter((a) => isTerminal(a.asset.status));
+      if (disposed.length > 0) {
+        throw new AppError(
+          `Cannot return disposed asset(s): ${disposed.map((a) => a.asset.assetTag).join(", ")}.`,
+          { code: "INVALID_TRANSITION" }
+        );
+      }
+
+      // The user describes what came back; the system derives the resulting status.
+      const nextAssetStatus = returnAssetStatus(input.outcome, input.condition);
       const now = new Date();
 
       await prisma.$transaction(async (tx) => {
@@ -71,7 +80,7 @@ export async function returnAssets(raw: unknown): Promise<ActionResult<{ process
             data: {
               assetId: assignment.asset.id,
               type: "RETURN",
-              fromStatus: "ASSIGNED",
+              fromStatus: assignment.asset.status,
               toStatus: nextAssetStatus as never,
               fromEmployeeId: assignment.employeeId,
               fromSiteId: assignment.asset.siteId,
@@ -79,7 +88,7 @@ export async function returnAssets(raw: unknown): Promise<ActionResult<{ process
               performedById: user.id,
               referenceType: "ASSIGNMENT",
               referenceId: assignment.id,
-              previousValue: { status: "ASSIGNED", assignedEmployeeId: assignment.employeeId },
+              previousValue: { status: assignment.asset.status, assignedEmployeeId: assignment.employeeId },
               newValue: { status: nextAssetStatus, condition: input.condition },
               notes: input.notes || `Returned by ${assignment.employee.firstName} ${assignment.employee.lastName}`,
             },

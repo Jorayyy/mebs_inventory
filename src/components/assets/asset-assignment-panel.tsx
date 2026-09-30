@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { UserPlus, Undo2, Loader2 } from "lucide-react";
+import { UserPlus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -35,8 +35,9 @@ import { AssignmentStatusBadge, ConditionBadge } from "@/components/shared/statu
 import { EmptyState } from "@/components/shared/page-header";
 import { formatDate } from "@/lib/utils";
 import { ASSET_CONDITION } from "@/lib/constants";
+import { assetStatusLabel } from "@/lib/lifecycle";
 import { assignAssets } from "@/actions/assets";
-import { returnAssets } from "@/actions/assignments";
+import { ReturnAssignmentButton } from "@/components/assignments/return-assignment-dialog";
 import type { AssetDetailData } from "@/components/assets/asset-detail";
 
 export function AssignmentPanel({
@@ -50,19 +51,12 @@ export function AssignmentPanel({
   const { asset, assignments, permissions } = data;
 
   const [assignOpen, setAssignOpen] = React.useState(false);
-  const [returning, setReturning] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
 
   const [employeeId, setEmployeeId] = React.useState("");
   const [condition, setCondition] = React.useState<string>("GOOD");
   const [expectedReturnAt, setExpectedReturnAt] = React.useState("");
   const [notes, setNotes] = React.useState("");
-
-  const [returnCondition, setReturnCondition] = React.useState<string>("GOOD");
-  const [returnOutcome, setReturnOutcome] = React.useState<"RETURNED" | "DAMAGED" | "MISSING">(
-    "RETURNED"
-  );
-  const [returnNotes, setReturnNotes] = React.useState("");
 
   const [employees, setEmployees] = React.useState<{ id: string; label: string }[]>([]);
   const [loadingEmployees, setLoadingEmployees] = React.useState(false);
@@ -107,33 +101,14 @@ export function AssignmentPanel({
     }
   }
 
-  async function submitReturn() {
-    if (!returning) return;
-    setPending(true);
-    try {
-      const result = await returnAssets({
-        assignmentIds: [returning],
-        condition: returnCondition as never,
-        outcome: returnOutcome,
-        notes: returnNotes || undefined,
-      });
-      if (!result.ok) {
-        toast.error(result.error, { description: `Reference: ${result.errorId}` });
-        return;
-      }
-      toast.success("Return recorded");
-      setReturning(null);
-      setReturnNotes("");
-      onChange();
-      router.refresh();
-    } finally {
-      setPending(false);
-    }
-  }
-
   const activeCount = assignments.filter(
     (a) => a.status === "ACTIVE" || a.status === "RETURN_PENDING"
   ).length;
+
+  const employeeLabel = employees.find((e) => e.id === employeeId)?.label ?? "";
+  const openAssignment = assignments.find(
+    (a) => a.status === "ACTIVE" || a.status === "RETURN_PENDING"
+  );
 
   return (
     <div className="space-y-3">
@@ -147,19 +122,17 @@ export function AssignmentPanel({
             <UserPlus /> Assign asset
           </Button>
         )}
-        {permissions.assign && asset.status === "ASSIGNED" && asset.assignedEmployee && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const open = assignments.find(
-                (a) => a.status === "ACTIVE" || a.status === "RETURN_PENDING"
-              );
-              if (open) setReturning(open.id);
+        {permissions.assign && openAssignment && (
+          <ReturnAssignmentButton
+            assignmentId={openAssignment.id}
+            assetTag={asset.assetTag}
+            assetName={asset.name}
+            label="Record return"
+            onDone={() => {
+              onChange();
+              router.refresh();
             }}
-          >
-            <Undo2 /> Record return
-          </Button>
+          />
         )}
       </div>
 
@@ -243,14 +216,16 @@ export function AssignmentPanel({
                     <TableCell className="text-right">
                       {(assignment.status === "ACTIVE" ||
                         assignment.status === "RETURN_PENDING") && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7"
-                          onClick={() => setReturning(assignment.id)}
-                        >
-                          <Undo2 /> Return
-                        </Button>
+                        <ReturnAssignmentButton
+                          assignmentId={assignment.id}
+                          assetTag={asset.assetTag}
+                          assetName={asset.name}
+                          label="Return"
+                          onDone={() => {
+                            onChange();
+                            router.refresh();
+                          }}
+                        />
                       )}
                     </TableCell>
                   )}
@@ -317,6 +292,39 @@ export function AssignmentPanel({
               <Label>Notes</Label>
               <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
+
+            <div className="rounded-lg border bg-muted/40 p-3 text-xs">
+              <p className="mb-1.5 font-medium text-foreground">What happens when you confirm</p>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>
+                  <span className="font-mono">{asset.assetTag}</span> changes from{" "}
+                  <span className="text-foreground">{assetStatusLabel(asset.status)}</span> to{" "}
+                  <span className="text-foreground">Assigned</span>
+                  {employeeLabel ? (
+                    <>
+                      {" "}
+                      — custody held by <span className="text-foreground">{employeeLabel}</span>
+                    </>
+                  ) : null}
+                  .
+                </li>
+                <li>
+                  Condition on handover:{" "}
+                  <span className="text-foreground">
+                    {ASSET_CONDITION[condition as keyof typeof ASSET_CONDITION]?.label ?? condition}
+                  </span>
+                  .
+                </li>
+                <li>
+                  Expected return:{" "}
+                  <span className="text-foreground">
+                    {expectedReturnAt ? formatDate(expectedReturnAt) : "not set"}
+                  </span>
+                  .
+                </li>
+                <li>Written to the asset ledger and the employee&apos;s profile.</li>
+              </ul>
+            </div>
           </div>
 
           <DialogFooter>
@@ -331,72 +339,6 @@ export function AssignmentPanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={returning !== null} onOpenChange={(open) => !open && setReturning(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Record return</DialogTitle>
-            <DialogDescription>
-              Closes the assignment and updates the asset&apos;s status and condition.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Outcome</Label>
-                <Select
-                  value={returnOutcome}
-                  onValueChange={(v) => setReturnOutcome(v as typeof returnOutcome)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="RETURNED">Returned</SelectItem>
-                    <SelectItem value="DAMAGED">Returned damaged</SelectItem>
-                    <SelectItem value="MISSING">Missing / not returned</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Condition on return</Label>
-                <Select value={returnCondition} onValueChange={setReturnCondition}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ASSET_CONDITION).map(([value, meta]) => (
-                      <SelectItem key={value} value={value}>
-                        {meta.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Notes</Label>
-              <Textarea
-                rows={2}
-                value={returnNotes}
-                onChange={(e) => setReturnNotes(e.target.value)}
-                placeholder="Accessories returned, visible wear…"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReturning(null)}>
-              Cancel
-            </Button>
-            <Button onClick={submitReturn} disabled={pending}>
-              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Confirm return
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Boxes, Upload, Inbox } from "lucide-react";
+import { Boxes, Plus, Upload } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermissionPage, isGlobal, can } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -15,11 +15,10 @@ import {
   LowStockPanel,
   type LowStockItem,
 } from "@/components/inventory/low-stock-panel";
-import { NewInventoryItemButton } from "@/components/inventory/inventory-form";
-import { NewReceiptButton } from "@/components/inventory/receipt-form";
+import { InventoryTabs } from "@/components/inventory/inventory-tabs";
 import type { Prisma } from "@/generated/prisma";
 
-export const metadata: Metadata = { title: "Inventory" };
+export const metadata: Metadata = { title: "Stock" };
 
 /** `currentQty <= reorderLevel` cannot be expressed in a Prisma where clause, so the
  *  matching rows are loaded once (capped), computed, filtered, sorted and paginated here. */
@@ -213,10 +212,12 @@ export default async function InventoryPage({
     )
   ).toString()}`;
 
+  const canAdd = canReceive || canAdjust;
+
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Inventory"
+        title="Stock"
         description={
           items.length >= MAX_ROWS
             ? `Showing the first ${MAX_ROWS.toLocaleString()} matching items — narrow the filters to see everything.`
@@ -224,11 +225,6 @@ export default async function InventoryPage({
         }
         actions={
           <>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/inventory/receive">
-                <Inbox /> Receiving
-              </Link>
-            </Button>
             {showExport && (
               <Button variant="outline" size="sm" asChild>
                 <a href={exportHref}>
@@ -236,11 +232,11 @@ export default async function InventoryPage({
                 </a>
               </Button>
             )}
-            {canReceive && <NewReceiptButton />}
-            {canAdjust && <NewInventoryItemButton />}
           </>
         }
       />
+
+      <InventoryTabs canAdd={canAdd} />
 
       <InventoryStats summary={summary} />
 
@@ -273,7 +269,7 @@ export default async function InventoryPage({
         />
         <FilterSelect
           param="low"
-          label="Stock"
+          label="Stock level"
           allLabel="Any stock level"
           options={[{ value: "yes", label: "Low stock" }]}
         />
@@ -293,8 +289,12 @@ export default async function InventoryPage({
             title="No inventory items match your filters"
             description="Clear the filters, or register a consumable item to start tracking stock."
             action={
-              canAdjust ? (
-                <NewInventoryItemButton label="New item" />
+              canAdd ? (
+                <Button size="sm" asChild>
+                  <Link href="/inventory/new">
+                    <Plus /> Add inventory
+                  </Link>
+                </Button>
               ) : undefined
             }
           />

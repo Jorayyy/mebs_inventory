@@ -7,6 +7,7 @@ import { requirePermissionPage, assertSiteAccess, can } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
 import { PageHeader, SectionCard, DetailGrid, DetailItem, EmptyState } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { InventoryTabs } from "@/components/inventory/inventory-tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { ReceiptRow } from "@/components/inventory/receipt-columns";
@@ -122,6 +123,8 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
         title={receipt.receiptNumber}
         description={`${receipt.supplier?.name ?? "No supplier"} · ${receipt.site.name} (${receipt.site.code})`}
       />
+
+      <InventoryTabs canAdd={canReceive} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">

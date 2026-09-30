@@ -16,6 +16,7 @@ import {
 import { StatusBadge, ConditionBadge, AssignmentStatusBadge } from "@/components/shared/status-badge";
 import { EMPLOYMENT_STATUS } from "@/lib/constants";
 import { EmployeeExitButton } from "@/components/employees/employee-exit-dialog";
+import { ReturnAssignmentButton } from "@/components/assignments/return-assignment-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -53,6 +54,7 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
   assertSiteAccess(user, employee.siteId);
 
   const canManage = can(user, PERMISSIONS.EMPLOYEES_MANAGE);
+  const canReturn = can(user, PERMISSIONS.ASSIGNMENTS_RETURN);
   const fullName = `${employee.firstName} ${employee.lastName}`;
 
   const [openAssignments, assignedAssets, returnHistory, directReports] =
@@ -250,6 +252,14 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                         <Link href={`/assets/${row.asset.id}`} className="text-xs text-primary hover:underline">
                           Open
                         </Link>
+                        {canReturn && (
+                          <ReturnAssignmentButton
+                            assignmentId={row.id}
+                            assetTag={row.asset.assetTag}
+                            assetName={row.asset.name}
+                            label="Return"
+                          />
+                        )}
                       </div>
                     </li>
                   ))}
@@ -302,6 +312,7 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                   <TableHead>Expected return</TableHead>
                   <TableHead>Acknowledged</TableHead>
                   <TableHead>Assigned by</TableHead>
+                  {canReturn && <TableHead className="text-right">Action</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -333,6 +344,16 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                         {row.acknowledgedAt ? formatDate(row.acknowledgedAt) : "Pending"}
                       </TableCell>
                       <TableCell className="text-xs">{row.assignedBy.name}</TableCell>
+                      {canReturn && (
+                        <TableCell className="text-right">
+                          <ReturnAssignmentButton
+                            assignmentId={row.id}
+                            assetTag={row.asset.assetTag}
+                            assetName={row.asset.name}
+                            label="Return"
+                          />
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}

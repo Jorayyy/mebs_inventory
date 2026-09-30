@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma, withTx } from "@/lib/prisma";
+import { prisma, withTx, type Tx } from "@/lib/prisma";
 import { requirePermission, assertSiteAccess, getClientIp } from "@/lib/session";
 import { AppError, withAction, type ActionResult } from "@/lib/errors";
 import { recordAudit } from "@/lib/audit";
@@ -9,11 +9,61 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { notify } from "@/lib/notify";
 import { nextMaintenanceRef } from "@/lib/ids";
 import type { AssetStatus } from "@/generated/prisma";
+import { assertAssetTransition, isTerminal } from "@/lib/lifecycle";
 import { maintenanceCreateSchema, maintenanceUpdateSchema } from "@/lib/validations/maintenance";
 
 /** Statuses that pull an asset out of service and back in. */
 const OUT_OF_SERVICE = new Set(["IN_REPAIR", "AWAITING_PARTS", "DIAGNOSED", "REPORTED"]);
 const BACK_IN_SERVICE = new Set(["COMPLETED", "RETURNED_TO_SERVICE"]);
+
+type MovableAsset = { id: string; assetTag: string; status: AssetStatus; siteId: string };
+
+/**
+ * The one place maintenance moves an asset. Validates the transition, updates
+ * custody when required and appends the immutable ledger row.
+ * Returns the asset's resulting status so callers can chain moves safely.
+ */
+async function moveAsset(
+  tx: Tx,
+  input: {
+    asset: MovableAsset;
+    from: AssetStatus;
+    to: AssetStatus;
+    userId: string;
+    referenceId: string;
+    notes: string;
+    assignedEmployeeId?: string | null;
+  }
+): Promise<AssetStatus> {
+  const { asset, from, to } = input;
+  if (from === to && input.assignedEmployeeId === undefined) return to;
+  assertAssetTransition(from, to, asset.assetTag);
+
+  await tx.asset.update({
+    where: { id: asset.id },
+    data: {
+      status: to,
+      ...(input.assignedEmployeeId !== undefined ? { assignedEmployeeId: input.assignedEmployeeId } : {}),
+    },
+  });
+  await tx.assetTransaction.create({
+    data: {
+      assetId: asset.id,
+      type: "MAINTENANCE",
+      fromStatus: from,
+      toStatus: to,
+      toSiteId: asset.siteId,
+      performedById: input.userId,
+      referenceType: "MAINTENANCE",
+      referenceId: input.referenceId,
+      previousValue: { status: from },
+      newValue: { status: to },
+      notes: input.notes,
+    },
+  });
+  return to;
+}
+
 
 export async function createMaintenance(raw: unknown): Promise<ActionResult<{ id: string }>> {
   return withAction(
@@ -24,6 +74,13 @@ export async function createMaintenance(raw: unknown): Promise<ActionResult<{ id
       const asset = await prisma.asset.findUnique({ where: { id: input.assetId } });
       if (!asset || asset.deletedAt) throw new AppError("Asset not found.", { status: 404 });
       assertSiteAccess(user, asset.siteId);
+
+      if (isTerminal(asset.status)) {
+        throw new AppError(
+          `${asset.assetTag} is ${asset.status === "DISPOSED" ? "disposed" : "retired"} â€” it cannot be sent to maintenance.`,
+          { code: "INVALID_TRANSITION" }
+        );
+      }
 
       const open = await prisma.maintenanceRecord.findFirst({
         where: { assetId: asset.id, status: { notIn: ["COMPLETED", "RETURNED_TO_SERVICE", "CANCELLED"] } },
@@ -51,24 +108,13 @@ export async function createMaintenance(raw: unknown): Promise<ActionResult<{ id
         });
 
         if (asset.status !== "UNDER_MAINTENANCE" && asset.status !== "FOR_REPAIR") {
-          await tx.asset.update({
-            where: { id: asset.id },
-            data: { status: "UNDER_MAINTENANCE" },
-          });
-          await tx.assetTransaction.create({
-            data: {
-              assetId: asset.id,
-              type: "MAINTENANCE",
-              fromStatus: asset.status,
-              toStatus: "UNDER_MAINTENANCE",
-              toSiteId: asset.siteId,
-              performedById: user.id,
-              referenceType: "MAINTENANCE",
-              referenceId: record.id,
-              previousValue: { status: asset.status },
-              newValue: { status: "UNDER_MAINTENANCE" },
-              notes: input.issue,
-            },
+          await moveAsset(tx, {
+            asset,
+            from: asset.status,
+            to: "UNDER_MAINTENANCE",
+            userId: user.id,
+            referenceId: record.id,
+            notes: input.issue,
           });
         }
         return record.id;
@@ -127,6 +173,7 @@ export async function updateMaintenance(raw: unknown): Promise<ActionResult<{ id
 
       const cost = input.cost === undefined ? undefined : Number(input.cost || 0);
       const now = new Date();
+      let assetStatus: AssetStatus = record.asset.status;
 
       await prisma.$transaction(async (tx) => {
         await tx.maintenanceRecord.update({
@@ -147,50 +194,32 @@ export async function updateMaintenance(raw: unknown): Promise<ActionResult<{ id
         });
 
         if (OUT_OF_SERVICE.has(input.status) || input.status === "IN_REPAIR") {
-          if (record.asset.status !== "UNDER_MAINTENANCE") {
-            await tx.asset.update({
-              where: { id: record.asset.id },
-              data: { status: "UNDER_MAINTENANCE" },
-            });
-            await tx.assetTransaction.create({
-              data: {
-                assetId: record.asset.id,
-                type: "MAINTENANCE",
-                fromStatus: record.asset.status,
-                toStatus: "UNDER_MAINTENANCE",
-                toSiteId: record.asset.siteId,
-                performedById: user.id,
-                referenceType: "MAINTENANCE",
-                referenceId: record.id,
-                previousValue: { status: record.asset.status },
-                newValue: { status: "UNDER_MAINTENANCE" },
-                notes: `Maintenance ${input.status}`,
-              },
-            });
-          }
+          assetStatus = await moveAsset(tx, {
+            asset: record.asset,
+            from: assetStatus,
+            to: "UNDER_MAINTENANCE",
+            userId: user.id,
+            referenceId: record.id,
+            notes: `Maintenance ${input.status}`,
+          });
         }
 
         if (input.status === "RETURNED_TO_SERVICE" || input.status === "COMPLETED") {
-          const release = input.status === "RETURNED_TO_SERVICE";
-          if (release) {
-            await tx.asset.update({
-              where: { id: record.asset.id },
-              data: { status: "AVAILABLE" },
+          // Releasing an asset must respect custody: an open assignment wins,
+          // disposed/retired assets are never resurrected.
+          if (!isTerminal(assetStatus)) {
+            const open = await tx.assetAssignment.findFirst({
+              where: { assetId: record.asset.id, status: { in: ["ACTIVE", "RETURN_PENDING"] } },
+              select: { employeeId: true },
             });
-            await tx.assetTransaction.create({
-              data: {
-                assetId: record.asset.id,
-                type: "MAINTENANCE",
-                fromStatus: record.asset.status,
-                toStatus: "AVAILABLE",
-                toSiteId: record.asset.siteId,
-                performedById: user.id,
-                referenceType: "MAINTENANCE",
-                referenceId: record.id,
-                previousValue: { status: record.asset.status },
-                newValue: { status: "AVAILABLE" },
-                notes: "Returned to service",
-              },
+            assetStatus = await moveAsset(tx, {
+              asset: record.asset,
+              from: assetStatus,
+              to: open ? "ASSIGNED" : "AVAILABLE",
+              userId: user.id,
+              referenceId: record.id,
+              assignedEmployeeId: open?.employeeId ?? null,
+              notes: open ? "Returned to service â€” still assigned" : "Returned to service",
             });
           }
         }
@@ -202,7 +231,7 @@ export async function updateMaintenance(raw: unknown): Promise<ActionResult<{ id
         entityType: "MaintenanceRecord",
         entityId: record.id,
         siteId: record.asset.siteId,
-        description: `Maintenance ${record.referenceNo} → ${input.status}`,
+        description: `Maintenance ${record.referenceNo} â†’ ${input.status}`,
         previousValue: { status: record.status, cost: Number(record.cost) },
         newValue: { status: input.status, cost },
         ip: await getClientIp(),
@@ -234,114 +263,3 @@ export async function updateMaintenance(raw: unknown): Promise<ActionResult<{ id
   );
 }
 
-const OUT_OF_SERVICE_STATUSES = ["REPORTED", "DIAGNOSED", "IN_REPAIR", "AWAITING_PARTS"];
-const RELEASED_STATUSES = ["COMPLETED", "RETURNED_TO_SERVICE"];
-
-/**
- * Reconciles an asset's service status with its maintenance ticket.
- * Run after `updateMaintenance`: released tickets free the asset (ASSIGNED while an
- * assignment is still open, otherwise AVAILABLE) and open tickets pull it out of service.
- */
-export async function syncMaintenanceAssetStatus(
-  maintenanceId: string
-): Promise<ActionResult<{ id: string; assetStatus: string }>> {
-  return withAction(
-    async () => {
-      const user = await requirePermission(PERMISSIONS.MAINTENANCE_MANAGE);
-      const record = await prisma.maintenanceRecord.findUnique({
-        where: { id: maintenanceId },
-        select: {
-          id: true,
-          referenceNo: true,
-          status: true,
-          reportedById: true,
-          technicianId: true,
-          asset: { select: { id: true, assetTag: true, status: true, siteId: true, assignedEmployeeId: true } },
-        },
-      });
-      if (!record) throw new AppError("Maintenance record not found.", { status: 404 });
-      assertSiteAccess(user, record.asset.siteId);
-
-      const active = await prisma.assetAssignment.findFirst({
-        where: { assetId: record.asset.id, status: { in: ["ACTIVE", "RETURN_PENDING"] } },
-        select: { id: true, employeeId: true },
-      });
-
-      let desired: AssetStatus;
-      if (OUT_OF_SERVICE_STATUSES.includes(record.status)) {
-        desired = "UNDER_MAINTENANCE";
-      } else if (RELEASED_STATUSES.includes(record.status)) {
-        desired = active ? "ASSIGNED" : "AVAILABLE";
-      } else if (active) {
-        desired = "ASSIGNED";
-      } else {
-        desired = ["UNDER_MAINTENANCE", "FOR_REPAIR"].includes(record.asset.status)
-          ? "AVAILABLE"
-          : record.asset.status;
-      }
-
-      const sameEmployee = (record.asset.assignedEmployeeId ?? null) === (active?.employeeId ?? null);
-      if (desired === record.asset.status && sameEmployee) {
-        return { id: record.id, assetStatus: desired };
-      }
-
-      await withTx(async (tx) => {
-        await tx.asset.update({
-          where: { id: record.asset.id },
-          data: { status: desired, assignedEmployeeId: active?.employeeId ?? null },
-        });
-        await tx.assetTransaction.create({
-          data: {
-            assetId: record.asset.id,
-            type: "MAINTENANCE",
-            fromStatus: record.asset.status,
-            toStatus: desired,
-            toSiteId: record.asset.siteId,
-            performedById: user.id,
-            referenceType: "MAINTENANCE",
-            referenceId: record.id,
-            previousValue: { status: record.asset.status },
-            newValue: { status: desired },
-            notes: `${record.referenceNo} → ${record.status}`,
-          },
-        });
-      });
-
-      await recordAudit({
-        userId: user.id,
-        action: "MAINTENANCE_UPDATED",
-        entityType: "Asset",
-        entityId: record.asset.id,
-        siteId: record.asset.siteId,
-        description: `Asset ${record.asset.assetTag} → ${desired} after ${record.referenceNo} reached ${record.status}`,
-        previousValue: { status: record.asset.status },
-        newValue: { status: desired },
-        ip: await getClientIp(),
-      });
-
-      const parties = await prisma.user.findMany({
-        where: {
-          status: "ACTIVE",
-          deletedAt: null,
-          id: { in: [record.reportedById, record.technicianId].filter(Boolean) as string[] },
-        },
-        select: { id: true },
-      });
-      await notify({
-        userIds: parties.map((p) => p.id),
-        type: "MAINTENANCE_UPDATE",
-        title: `${record.asset.assetTag} is now ${desired.toLowerCase().replace("_", " ")}`,
-        body: `${record.referenceNo} moved to ${record.status.toLowerCase().replace("_", " ")}.`,
-        entityType: "MaintenanceRecord",
-        entityId: record.id,
-        link: `/maintenance/${record.id}`,
-      });
-
-      revalidatePath("/maintenance");
-      revalidatePath(`/maintenance/${record.id}`);
-      revalidatePath(`/assets/${record.asset.id}`);
-      return { id: record.id, assetStatus: desired };
-    },
-    { action: "syncMaintenanceAssetStatus", maintenanceId }
-  );
-}

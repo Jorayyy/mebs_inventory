@@ -57,6 +57,20 @@ export type RecentActivity = {
   createdAt: Date;
 };
 
+/**
+ * One row on the "Needs attention" board: work that is waiting on a human
+ * rather than a number to admire.
+ */
+export type AttentionItem = {
+  id: string;
+  kind: "overdue-return" | "exited-custody" | "awaiting-receipt" | "open-maintenance";
+  title: string;
+  subtitle: string;
+  href: string;
+  severity: "danger" | "warning" | "info";
+  meta: string;
+};
+
 export type SiteSummary = {
   siteId: string;
   siteName: string;
@@ -79,6 +93,7 @@ export type DashboardData = {
   warrantyExpiring: WarrantyExpiring[];
   lowStockItems: LowStockItem[];
   pendingApprovals: PendingApproval[];
+  attentionItems: AttentionItem[];
   recentActivity: RecentActivity[];
   siteSummary: SiteSummary[];
   generatedAt: Date;
@@ -155,6 +170,9 @@ export async function getDashboardData(): Promise<DashboardData> {
     warrantyRows,
     itemRows,
     pendingRows,
+    overdueRows,
+    exitedCustodyRows,
+    awaitingReceiptRows,
     activityRows,
   ] = await Promise.all([
     prisma.asset.aggregate({ where: assetWhere, _count: { _all: true }, _sum: { purchasePrice: true } }),
@@ -234,6 +252,51 @@ export async function getDashboardData(): Promise<DashboardData> {
         toSite: { select: { name: true } },
         requestedBy: { select: { name: true } },
         _count: { select: { assets: true, items: true } },
+      },
+    }),
+    prisma.assetAssignment.findMany({
+      where: {
+        ...assignmentWhere,
+        status: { in: ["ACTIVE", "RETURN_PENDING"] as AssignmentStatus[] },
+        expectedReturnAt: { lt: now },
+      },
+      orderBy: { expectedReturnAt: "asc" },
+      take: 5,
+      select: {
+        id: true,
+        expectedReturnAt: true,
+        asset: { select: { id: true, assetTag: true, name: true } },
+        employee: { select: { id: true, firstName: true, lastName: true } },
+      },
+    }),
+    prisma.asset.findMany({
+      where: {
+        ...assetWhere,
+        assignedEmployeeId: { not: null },
+        assignedEmployee: { employmentStatus: "EXITED" },
+      },
+      take: 5,
+      select: {
+        id: true,
+        assetTag: true,
+        name: true,
+        assignedEmployee: { select: { id: true, firstName: true, lastName: true } },
+      },
+    }),
+    prisma.transfer.findMany({
+      where: {
+        ...transferWhere,
+        status: "IN_TRANSIT",
+        ...(ids ? { toSiteId: { in: ids } } : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        transferNumber: true,
+        updatedAt: true,
+        fromSite: { select: { name: true } },
+        toSite: { select: { name: true } },
       },
     }),
     can(user, PERMISSIONS.AUDIT_VIEW)
@@ -322,6 +385,67 @@ export async function getDashboardData(): Promise<DashboardData> {
   const assignedAssets = statusGroups.find((group) => group.status === "ASSIGNED")?._count._all ?? 0;
   const availableAssets = statusGroups.find((group) => group.status === "AVAILABLE")?._count._all ?? 0;
 
+  const attentionItems: AttentionItem[] = [
+    ...overdueRows.map((row) => ({
+      id: row.id,
+      kind: "overdue-return" as const,
+      title: `${row.asset.assetTag} is overdue`,
+      subtitle: `${row.asset.name} · ${row.employee.firstName} ${row.employee.lastName}`,
+      href: `/assignments?employee=${row.employee.id}`,
+      severity: "danger" as const,
+      meta: `Due ${row.expectedReturnAt ? new Date(row.expectedReturnAt).toLocaleDateString("en-PH") : "—"}`,
+    })),
+    ...exitedCustodyRows.map((asset) => ({
+      id: asset.id,
+      kind: "exited-custody" as const,
+      title: `${asset.assetTag} still with an exited employee`,
+      subtitle: `${asset.name} · ${asset.assignedEmployee?.firstName ?? ""} ${asset.assignedEmployee?.lastName ?? ""}`.trim(),
+      href: `/assets/${asset.id}`,
+      severity: "warning" as const,
+      meta: "Recover custody",
+    })),
+    ...(can(user, PERMISSIONS.TRANSFERS_RECEIVE)
+      ? awaitingReceiptRows.map((transfer) => ({
+          id: transfer.id,
+          kind: "awaiting-receipt" as const,
+          title: `${transfer.transferNumber} awaiting receipt`,
+          subtitle: `${transfer.fromSite.name} → ${transfer.toSite.name}`,
+          href: `/transfers/${transfer.id}`,
+          severity: "info" as const,
+          meta: `Sent ${transfer.updatedAt.toLocaleDateString("en-PH")}`,
+        }))
+      : []),
+    ...(openMaintenance > 0
+      ? [
+          {
+            id: "open-maintenance",
+            kind: "open-maintenance" as const,
+            title: `${openMaintenance} maintenance job${openMaintenance === 1 ? "" : "s"} open`,
+            subtitle: "Waiting on a technician, a part or a release back to service.",
+            href: "/maintenance",
+            severity: "warning" as const,
+            meta: "Maintenance",
+          },
+        ]
+      : []),
+    ...(lowItems.length > 0
+      ? [
+          {
+            id: "low-stock",
+            kind: "open-maintenance" as const,
+            title: `${lowItems.length} stock item${lowItems.length === 1 ? "" : "s"} at or below reorder level`,
+            subtitle: "Raise a receipt before the shelves run dry.",
+            href: "/inventory?low=yes",
+            severity: "info" as const,
+            meta: "Reorder",
+          },
+        ]
+      : []),
+  ].sort((a, b) => {
+    const rank = { danger: 0, warning: 1, info: 2 } as const;
+    return rank[a.severity] - rank[b.severity];
+  });
+
   return {
     stats: {
       totalAssets: assetAgg._count._all,
@@ -379,6 +503,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           lines: transfer._count.assets + transfer._count.items,
         }))
       : [],
+    attentionItems,
     recentActivity: activityRows.map((entry) => ({
       id: entry.id,
       action: entry.action,

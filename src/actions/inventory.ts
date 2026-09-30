@@ -523,7 +523,7 @@ export async function createInventoryItem(raw: unknown): Promise<ActionResult<In
           await tx.inventoryTransaction.create({
             data: {
               inventoryItemId: created.id,
-              type: "ADJUSTMENT",
+              type: "RECEIVE",
               quantity: openingQty,
               balanceAfter: openingQty,
               unitCost: Number(input.unitCost ?? 0),
@@ -531,7 +531,7 @@ export async function createInventoryItem(raw: unknown): Promise<ActionResult<In
               toLocationId: created.stockLocationId,
               performedById: user.id,
               referenceType: "MANUAL",
-              notes: "Opening balance",
+              notes: "Opening balance received",
             },
           });
         }

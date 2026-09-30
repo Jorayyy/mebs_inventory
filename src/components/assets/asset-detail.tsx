@@ -12,7 +12,13 @@ import {
   ShieldCheck,
   MapPin,
   UserRound,
+  UserPlus,
   Clock,
+  Undo2,
+  Wrench,
+  PackageCheck,
+  Trash2,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,11 +39,19 @@ import {
 } from "@/components/shared/page-header";
 import {
   AssetStatusBadge,
+  AssignmentStatusBadge,
   ConditionBadge,
   TransferStatusBadge,
 } from "@/components/shared/status-badge";
 import { formatDate, formatCurrency, formatRelative, daysUntil } from "@/lib/utils";
 import { INVENTORY_TX_LABELS } from "@/lib/constants";
+import {
+  assetStatusLabel,
+  permittedAssetActions,
+  nextStepHint,
+  type AssetActionKey,
+} from "@/lib/lifecycle";
+import { PERMISSIONS } from "@/lib/permissions";
 import { AssignmentPanel } from "@/components/assets/asset-assignment-panel";
 import { MaintenancePanel } from "@/components/assets/asset-maintenance-panel";
 import { PrintLabelsDialog } from "@/components/assets/print-labels-dialog";
@@ -197,13 +211,56 @@ export function AssetDetail({ data }: { data: AssetDetailData }) {
           ? "warning"
           : "success";
 
+  const openAssignment = data.assignments.find(
+    (a) => a.status === "ACTIVE" || a.status === "RETURN_PENDING"
+  );
+
+  const permissionKeys: string[] = [];
+  if (permissions.assign) {
+    permissionKeys.push(PERMISSIONS.ASSETS_ASSIGN, PERMISSIONS.ASSIGNMENTS_RETURN);
+  }
+  if (permissions.transfer) permissionKeys.push(PERMISSIONS.TRANSFERS_CREATE);
+  if (permissions.maintenance) {
+    permissionKeys.push(PERMISSIONS.MAINTENANCE_MANAGE, PERMISSIONS.MAINTENANCE_VIEW);
+  }
+  if (permissions.update) permissionKeys.push(PERMISSIONS.ASSETS_UPDATE);
+  if (permissions.dispose) permissionKeys.push(PERMISSIONS.ASSETS_DISPOSE);
+
+  const contextualActions = permittedAssetActions(asset.status, permissionKeys, {
+    openAssignment: !!openAssignment,
+  });
+  const primaryAction = contextualActions.find((action) => action.primary);
+  const hint = nextStepHint(asset.status);
+
+  const actionIcon: Record<AssetActionKey, React.ReactNode> = {
+    assign: <UserPlus className="h-4 w-4" />,
+    return: <Undo2 className="h-4 w-4" />,
+    transfer: <ArrowLeftRight className="h-4 w-4" />,
+    maintenance: <Wrench className="h-4 w-4" />,
+    receive: <PackageCheck className="h-4 w-4" />,
+    dispose: <Trash2 className="h-4 w-4" />,
+    edit: <Pencil className="h-4 w-4" />,
+    label: <Tag className="h-4 w-4" />,
+  };
+
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <AssetStatusBadge status={asset.status as never} />
         <ConditionBadge condition={asset.condition as never} />
+        {openAssignment && (
+          <Badge variant="info">
+            With {openAssignment.employee.firstName} {openAssignment.employee.lastName}
+          </Badge>
+        )}
         {asset.supplier && <Badge variant="outline">{asset.supplier.name}</Badge>}
         <div className="ml-auto flex flex-wrap gap-2">
+          {primaryAction && (
+            <Button size="sm" onClick={() => setInitialTab(primaryAction.tab)}>
+              {actionIcon[primaryAction.key]}
+              {primaryAction.label}
+            </Button>
+          )}
           {permissions.print && (
             <Button variant="outline" size="sm" onClick={() => setShowLabels(true)}>
               <Tag /> Label
@@ -226,6 +283,13 @@ export function AssetDetail({ data }: { data: AssetDetailData }) {
         </div>
       </div>
 
+      {hint && (
+        <p className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="h-3.5 w-3.5 shrink-0" />
+          {hint}
+        </p>
+      )}
+
       <Tabs value={initialTab} onValueChange={setInitialTab}>
         <TabsList className="h-9 w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -237,6 +301,72 @@ export function AssetDetail({ data }: { data: AssetDetailData }) {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Custody</CardTitle>
+              <CardDescription>
+                Who is holding this asset right now, and what happens next.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {openAssignment ? (
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <UserRound className="h-4 w-4 text-primary" />
+                      <Link
+                        href={`/employees/${openAssignment.employee.id}`}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        {openAssignment.employee.firstName} {openAssignment.employee.lastName}
+                      </Link>
+                      <span className="text-xs text-muted-foreground">
+                        {openAssignment.employee.employeeNo}
+                      </span>
+                      <AssignmentStatusBadge status={openAssignment.status as never} />
+                    </div>
+                    <DetailGrid>
+                      <DetailItem label="Assigned">
+                        {formatDate(openAssignment.assignedAt)} by {openAssignment.assignedBy.name}
+                      </DetailItem>
+                      <DetailItem label="Condition on handover">
+                        <ConditionBadge condition={openAssignment.conditionAtAssignment as never} />
+                      </DetailItem>
+                      <DetailItem label="Expected return">
+                        {formatDate(openAssignment.expectedReturnAt)}
+                      </DetailItem>
+                      <DetailItem label="Returned">
+                        {formatDate(openAssignment.returnedAt)}
+                      </DetailItem>
+                    </DetailGrid>
+                    {openAssignment.notes && (
+                      <p className="text-xs text-muted-foreground">{openAssignment.notes}</p>
+                    )}
+                  </div>
+                  {permissions.assign && (
+                    <Button size="sm" onClick={() => setInitialTab("assignment")}>
+                      <Undo2 /> Record return
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Not assigned to anyone</p>
+                    <p className="text-xs text-muted-foreground">
+                      {hint || "Custody stays with the company until this asset is handed over."}
+                    </p>
+                  </div>
+                  {permissions.assign && contextualActions.some((a) => a.key === "assign") && (
+                    <Button size="sm" onClick={() => setInitialTab("assignment")}>
+                      <UserPlus /> Assign asset
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Asset information</CardTitle>
@@ -277,17 +407,6 @@ export function AssetDetail({ data }: { data: AssetDetailData }) {
                   {asset.costCenter ? `${asset.costCenter.code} — ${asset.costCenter.name}` : "—"}
                 </DetailItem>
 
-                <DetailItem label="Assigned to">
-                  {asset.assignedEmployee ? (
-                    <Link href={`/employees/${asset.assignedEmployee.id}`} className="inline-flex items-center gap-1 text-primary hover:underline">
-                      <UserRound className="h-3.5 w-3.5" />
-                      {asset.assignedEmployee.firstName} {asset.assignedEmployee.lastName} ·{" "}
-                      {asset.assignedEmployee.employeeNo}
-                    </Link>
-                  ) : (
-                    <span className="text-muted-foreground">Unassigned</span>
-                  )}
-                </DetailItem>
                 <DetailItem label="Custodian">{asset.custodian?.name || "—"}</DetailItem>
 
                 <DetailItem label="Purchase date">{formatDate(asset.purchaseDate)}</DetailItem>
@@ -429,65 +548,74 @@ export function AssetDetail({ data }: { data: AssetDetailData }) {
         <TabsContent value="history" className="space-y-3">
           <Card>
             <CardHeader>
-              <CardTitle>Transaction history</CardTitle>
+              <CardTitle>History</CardTitle>
               <CardDescription>
-                Immutable ledger — {transactions.length} recorded event{transactions.length === 1 ? "" : "s"}.
+                Add → receive → assign → return → transfer → maintain → dispose, in one timeline.{" "}
+                {transactions.length} recorded event{transactions.length === 1 ? "" : "s"}.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent>
               {transactions.length === 0 ? (
-                <div className="p-4">
-                  <EmptyState title="No transactions recorded" />
-                </div>
+                <EmptyState
+                  title="Nothing has happened yet"
+                  description="Receiving, assignment, transfers and maintenance will all be logged here."
+                />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>When</TableHead>
-                      <TableHead>Event</TableHead>
-                      <TableHead>Status change</TableHead>
-                      <TableHead>Parties</TableHead>
-                      <TableHead>Handled by</TableHead>
-                      <TableHead>Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions.map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell className="whitespace-nowrap text-xs">
-                          {formatDate(tx.createdAt, true)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{INVENTORY_TX_LABELS[tx.type as never] ?? tx.type}</Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {tx.fromStatus ? `${tx.fromStatus} → ` : ""}
-                          {tx.toStatus ?? "—"}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {[
-                            tx.fromSite?.name ? `From ${tx.fromSite.name}` : null,
-                            tx.toSite?.name ? `To ${tx.toSite.name}` : null,
-                            tx.fromEmployee
-                              ? `Returned by ${tx.fromEmployee.firstName} ${tx.fromEmployee.lastName}`
-                              : null,
-                            tx.toEmployee
-                              ? `To ${tx.toEmployee.firstName} ${tx.toEmployee.lastName}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ") || "—"}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {tx.performedBy?.name ?? "System"}
-                        </TableCell>
-                        <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
-                          {tx.notes || "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <ol className="relative ms-1">
+                  {transactions.map((tx, index) => {
+                    const label = INVENTORY_TX_LABELS[tx.type as never] ?? tx.type;
+                    const parties = [
+                      tx.fromSite?.name ? `From ${tx.fromSite.name}` : null,
+                      tx.toSite?.name ? `To ${tx.toSite.name}` : null,
+                      tx.toEmployee
+                        ? `Handed to ${tx.toEmployee.firstName} ${tx.toEmployee.lastName}`
+                        : null,
+                      tx.fromEmployee
+                        ? `Returned by ${tx.fromEmployee.firstName} ${tx.fromEmployee.lastName}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+
+                    return (
+                      <li key={tx.id} className="relative ps-6 pb-5 last:pb-0">
+                        <span className="absolute -start-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary" />
+                        {index < transactions.length - 1 && (
+                          <span className="absolute -start-px top-4 bottom-0 w-px bg-border" />
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">{label}</Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(tx.createdAt, true)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            · {tx.performedBy?.name ?? "System"}
+                          </span>
+                        </div>
+
+                        {(tx.fromStatus || tx.toStatus) && (
+                          <p className="mt-1 flex items-center gap-1.5 text-xs">
+                            <span className="text-muted-foreground">
+                              {tx.fromStatus ? assetStatusLabel(tx.fromStatus) : "—"}
+                            </span>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-medium">
+                              {tx.toStatus ? assetStatusLabel(tx.toStatus) : "—"}
+                            </span>
+                          </p>
+                        )}
+
+                        {parties && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">{parties}</p>
+                        )}
+                        {tx.notes && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">{tx.notes}</p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
               )}
             </CardContent>
           </Card>

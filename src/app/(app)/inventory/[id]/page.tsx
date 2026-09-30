@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermissionPage, assertSiteAccess, can } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
 import { PageHeader } from "@/components/shared/page-header";
+import { InventoryTabs } from "@/components/inventory/inventory-tabs";
 import { InventoryDetail, type InventoryDetailData } from "@/components/inventory/inventory-detail";
 
 export const metadata: Metadata = { title: "Inventory item" };
@@ -187,17 +188,21 @@ export default async function InventoryItemPage({
     },
   };
 
+  const canAdd =
+    can(user, PERMISSIONS.INVENTORY_RECEIVE) || can(user, PERMISSIONS.INVENTORY_ADJUST);
+
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
         breadcrumb={
           <Link href="/inventory" className="inline-flex items-center gap-1 hover:text-foreground">
-            <ChevronLeft className="h-3 w-3" /> Inventory
+            <ChevronLeft className="h-3 w-3" /> Stock
           </Link>
         }
         title={item.name}
         description={`${item.sku} · ${item.category.name} · ${item.site.name}`}
       />
+      <InventoryTabs canAdd={canAdd} />
       <InventoryDetail data={data} />
     </div>
   );

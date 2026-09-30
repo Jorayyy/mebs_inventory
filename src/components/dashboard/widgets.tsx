@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeftRight, Boxes, Laptop, ScrollText } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Boxes, CheckCircle2, Laptop, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, SectionCard } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -14,12 +14,55 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type {
+  AttentionItem,
   LowStockItem,
   PendingApproval,
   RecentActivity,
   SiteSummary,
   WarrantyExpiring,
 } from "@/actions/dashboard";
+
+/**
+ * The one widget that answers "what should I do next?" — overdue returns,
+ * custody stranded with people who have left, stock waiting to be received.
+ */
+export function AttentionWidget({ items }: { items: AttentionItem[] }) {
+  return (
+    <SectionCard
+      title="Needs attention"
+      description="Work waiting on a person, not a number — most urgent first."
+    >
+      {items.length === 0 ? (
+        <EmptyState
+          icon={<CheckCircle2 className="h-8 w-8" />}
+          title="Nothing needs attention"
+          description="Overdue returns, stranded custody and open maintenance will appear here."
+        />
+      ) : (
+        <ul className="divide-y">
+          {items.map((item) => (
+            <li key={`${item.kind}-${item.id}`}>
+              <Link
+                href={item.href}
+                className="flex items-center justify-between gap-3 rounded-md px-1 py-2.5 transition-colors first:pt-0 last:pb-0 hover:bg-accent/50"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{item.title}</p>
+                  <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="hidden text-xs text-muted-foreground sm:inline">{item.meta}</span>
+                  <Badge variant={item.severity}>{item.severity === "danger" ? "Urgent" : "Open"}</Badge>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
 
 export function WarrantyWidget({ items }: { items: WarrantyExpiring[] }) {
   return (

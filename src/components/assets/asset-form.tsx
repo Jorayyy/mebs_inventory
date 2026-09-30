@@ -13,9 +13,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import { assetCreateSchema } from "@/lib/validations/asset";
 import { ASSET_STATUS, ASSET_CONDITION, DEPRECIATION_METHODS } from "@/lib/constants";
 import type { FormOptions } from "@/actions/catalog";
+import type { Asset } from "@/generated/prisma";
 import type { z } from "zod";
 
 type Values = z.infer<typeof assetCreateSchema>;
@@ -35,6 +39,12 @@ export function AssetForm({
   const [siteId, setSiteId] = React.useState(initial?.siteId ?? "");
   const [categoryId, setCategoryId] = React.useState(initial?.categoryId ?? "");
 
+  // Register + assign in one sitting: the common case for new equipment.
+  const [assignNow, setAssignNow] = React.useState(false);
+  const [assigneeId, setAssigneeId] = React.useState("");
+  const [assignCondition, setAssignCondition] = React.useState<Values["condition"]>("GOOD");
+  const [assignDue, setAssignDue] = React.useState("");
+
   const {
     register,
     setValue,
@@ -44,7 +54,7 @@ export function AssetForm({
     submitting,
     serverError,
     reset,
-  } = useFormAction<Values, { id: string }>(
+  } = useFormAction<Values, Asset>(
       async (values) => {
         const { createAsset, updateAsset } = await import("@/actions/assets");
         return mode === "edit" && initial?.id
@@ -53,7 +63,26 @@ export function AssetForm({
       },
       {
         successMessage: mode === "edit" ? "Asset updated" : "Asset created",
-        onSuccess: (asset) => {
+        onSuccess: async (asset) => {
+          if (mode === "create" && assignNow && assigneeId) {
+            const { assignAssets } = await import("@/actions/assets");
+            const result = await assignAssets({
+              assetIds: [asset.id],
+              employeeId: assigneeId,
+              conditionAtAssignment: assignCondition,
+              expectedReturnAt: assignDue,
+              notes: "Assigned at registration",
+            });
+            if (result.ok) {
+              toast.success("Asset registered and assigned", {
+                description: `${asset.assetTag} is now in custody.`,
+              });
+            } else {
+              toast.error(result.error, {
+                description: "The asset was created but not assigned — use Assign asset on its page.",
+              });
+            }
+          }
           router.push(`/assets/${asset.id}`);
           router.refresh();
         },
@@ -275,11 +304,13 @@ export function AssetForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(ASSET_STATUS).map(([value, meta]) => (
-                  <SelectItem key={value} value={value}>
-                    {meta.label}
-                  </SelectItem>
-                ))}
+                {Object.entries(ASSET_STATUS)
+                  .filter(([value]) => mode === "edit" || (value !== "ASSIGNED" && value !== "DISPOSED"))
+                  .map(([value, meta]) => (
+                    <SelectItem key={value} value={value}>
+                      {meta.label}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </Field>
@@ -349,6 +380,81 @@ export function AssetForm({
           </Field>
         </CardContent>
       </Card>
+
+      {mode === "create" && options.employees.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Custody</CardTitle>
+            <CardDescription>
+              Register and hand over in one step. The asset is recorded first, then assigned —
+              leaving an open assignment from which it can be returned later.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="assignNow"
+                checked={assignNow}
+                onCheckedChange={(checked) => setAssignNow(checked === true)}
+              />
+              <Label htmlFor="assignNow" className="cursor-pointer text-sm font-medium">
+                Assign this asset to an employee now
+              </Label>
+            </div>
+
+            {assignNow && (
+              <div className="grid grid-cols-1 gap-4 rounded-lg border bg-muted/30 p-4 sm:grid-cols-3">
+                <Field label="Assign to" htmlFor="assigneeId" required>
+                  <Select value={assigneeId} onValueChange={setAssigneeId}>
+                    <SelectTrigger id="assigneeId">
+                      <SelectValue placeholder="Select employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.employees.map((employee) => (
+                        <SelectItem key={employee.id} value={employee.id}>
+                          {employee.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Condition on handover" htmlFor="assignCondition">
+                  <Select
+                    value={assignCondition}
+                    onValueChange={(value) => setAssignCondition(value as Values["condition"])}
+                  >
+                    <SelectTrigger id="assignCondition">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(ASSET_CONDITION).map(([value, meta]) => (
+                        <SelectItem key={value} value={value}>
+                          {meta.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Expected return" htmlFor="assignDue" hint="Optional">
+                  <Input
+                    id="assignDue"
+                    type="date"
+                    value={assignDue}
+                    onChange={(event) => setAssignDue(event.target.value)}
+                  />
+                </Field>
+
+                <p className="text-xs text-muted-foreground sm:col-span-3">
+                  The asset will move straight to Assigned and appear on the employee&apos;s
+                  profile, ready for a one-click return.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => router.back()}>

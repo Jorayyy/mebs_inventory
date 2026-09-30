@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DashboardStatCards } from "@/components/dashboard/stat-cards";
 import { CategoryBarChart, DonutChart, TrendChart } from "@/components/dashboard/charts";
 import {
+  AttentionWidget,
   LowStockWidget,
   PendingApprovalsWidget,
   RecentActivityWidget,
@@ -56,6 +57,8 @@ export default async function DashboardPage() {
           assignments: can(user, PERMISSIONS.ASSIGNMENTS_VIEW),
         }}
       />
+
+      <AttentionWidget items={data.attentionItems} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard title="Assets by status" description="How the fleet is currently allocated.">

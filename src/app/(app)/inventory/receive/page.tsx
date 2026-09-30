@@ -10,6 +10,7 @@ import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filter
 import { UrlDataTable } from "@/components/transfers/url-data-table";
 import { receiptColumns, type ReceiptRow } from "@/components/inventory/receipt-columns";
 import { NewReceiptButton } from "@/components/inventory/receipt-form";
+import { InventoryTabs } from "@/components/inventory/inventory-tabs";
 
 export const metadata: Metadata = { title: "Receiving" };
 
@@ -130,13 +131,15 @@ export default async function ReceivingPage({
       <PageHeader
         breadcrumb={
           <Link href="/inventory" className="inline-flex items-center gap-1 hover:text-foreground">
-            <ChevronLeft className="h-3 w-3" /> Inventory
+            <ChevronLeft className="h-3 w-3" /> Stock
           </Link>
         }
         title="Receiving"
         description={`${rows.length.toLocaleString()} receipt${rows.length === 1 ? "" : "s"} matching the current filters.`}
         actions={canReceive ? <NewReceiptButton /> : undefined}
       />
+
+      <InventoryTabs canAdd={canReceive} />
 
       <FilterBar>
         <SearchInput placeholder="Receipt, invoice, PO, supplier…" defaultValue={query.q} />

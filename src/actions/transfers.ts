@@ -8,6 +8,7 @@ import { recordAudit, snapshot } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/permissions";
 import { notify } from "@/lib/notify";
 import { nextTransferNumber } from "@/lib/ids";
+import { assertTransferable, assertAssetTransition, isTerminal } from "@/lib/lifecycle";
 import {
   transferCreateSchema,
   transferIdSchema,
@@ -16,8 +17,6 @@ import {
   transferReceiveSchema,
 } from "@/lib/validations/transfer";
 import type { AssetCondition, AssetStatus, Prisma } from "@/generated/prisma";
-
-const OPEN_ASSET_STATUSES = ["ASSIGNED", "DISPOSED", "RETIRED", "LOST", "STOLEN"];
 
 const TRANSFER_INCLUDE = {
   assets: {
@@ -179,12 +178,30 @@ export async function createTransfer(raw: unknown): Promise<ActionResult<{ id: s
         if (asset.siteId !== input.fromSiteId) {
           throw new AppError(`${asset.assetTag} is not held at the source site.`, { code: "WRONG_SITE" });
         }
-        if (OPEN_ASSET_STATUSES.includes(asset.status)) {
-          throw new AppError(`${asset.assetTag} is ${asset.status.toLowerCase()} and cannot be transferred.`, {
-            code: "UNAVAILABLE",
-          });
-        }
+        assertTransferable(asset.status, asset.assetTag);
       });
+
+      // An asset can only be in one open transfer at a time.
+      if (input.assetIds.length) {
+        const inFlight = await prisma.transferAsset.findMany({
+          where: {
+            assetId: { in: input.assetIds },
+            status: { in: ["PENDING", "SENT"] },
+            transfer: { status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED", "IN_TRANSIT"] } },
+          },
+          select: { assetId: true, transfer: { select: { transferNumber: true } } },
+        });
+        if (inFlight.length > 0) {
+          const tags = assets
+            .filter((asset) => inFlight.some((line) => line.assetId === asset.id))
+            .map((asset) => asset.assetTag);
+          const ref = inFlight[0].transfer.transferNumber;
+          throw new AppError(
+            `${tags.join(", ")} already in open transfer ${ref}. Receive or cancel it first.`,
+            { code: "ALREADY_IN_TRANSFER" }
+          );
+        }
+      }
 
       const merged = new Map<string, number>();
       for (const line of input.items) {
@@ -576,11 +593,13 @@ export async function receiveTransfer(raw: unknown): Promise<ActionResult<{ id: 
           assertSiteAccess(user, asset.siteId);
           const condition: AssetCondition = conditionByAsset.get(asset.id) ?? line.conditionAtReceive ?? asset.condition;
           const siteChanged = asset.siteId !== transfer.toSiteId;
-          const nextStatus: AssetStatus = ["UNDER_MAINTENANCE", "FOR_REPAIR", "DAMAGED", "LOST", "STOLEN"].includes(
-            asset.status
-          )
+          const nextStatus: AssetStatus = isTerminal(asset.status) ||
+          ["UNDER_MAINTENANCE", "FOR_REPAIR", "LOST", "STOLEN"].includes(asset.status)
             ? asset.status
-            : "AVAILABLE";
+            : condition === "DAMAGED"
+              ? "UNDER_MAINTENANCE"
+              : "AVAILABLE";
+          assertAssetTransition(asset.status, nextStatus, asset.assetTag);
 
           await tx.transferAsset.update({
             where: { id: line.id },

@@ -8,6 +8,7 @@ import { recordAudit, snapshot } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/permissions";
 import { nextAssetTag } from "@/lib/ids";
 import { assetCreateSchema, assetUpdateSchema, assetStatusChangeSchema, assetAssignmentSchema } from "@/lib/validations/asset";
+import { assertAssignable, assertAssetTransition, isTerminal } from "@/lib/lifecycle";
 import type { Asset, Prisma } from "@/generated/prisma";
 import { logger } from "@/lib/logger";
 
@@ -87,6 +88,18 @@ export async function createAsset(raw: unknown): Promise<ActionResult<Asset>> {
       const user = await requirePermission(PERMISSIONS.ASSETS_CREATE);
       const input = assetCreateSchema.parse(raw);
       assertSiteAccess(user, input.siteId);
+
+      // Registration is the "Add" step: custody (assign), maintenance and
+      // disposal are reached through their own flows, never by starting there.
+      if (input.status === "ASSIGNED") {
+        throw new AppError(
+          "Register the asset first, then use Assign now to hand it to an employee.",
+          { code: "VALIDATION" }
+        );
+      }
+      if (isTerminal(input.status)) {
+        throw new AppError("An asset cannot be registered as disposed.", { code: "VALIDATION" });
+      }
 
       const companyId = await resolveCompanyId();
       const site = await prisma.site.findUnique({ where: { id: input.siteId }, select: { code: true } });
@@ -217,6 +230,23 @@ export async function updateAsset(raw: unknown): Promise<ActionResult<Asset>> {
       }
       assertSiteAccess(user, existing.siteId);
       if (input.siteId) assertSiteAccess(user, input.siteId);
+
+      // The edit form is not an escape hatch: illegal lifecycle moves are rejected.
+      if (input.status && input.status !== existing.status) {
+        assertAssetTransition(existing.status, input.status, existing.assetTag);
+      }
+      if (input.status === "ASSIGNED" && !existing.assignedEmployeeId) {
+        throw new AppError(
+          "Use Assign asset to hand this asset to an employee — status alone does not create custody.",
+          { code: "INVALID_TRANSITION" }
+        );
+      }
+      if (existing.assignedEmployeeId && input.status && input.status !== "ASSIGNED") {
+        throw new AppError(
+          "This asset is assigned. Record the return instead of changing its status here.",
+          { code: "INVALID_TRANSITION" }
+        );
+      }
 
       const companyId = existing.companyId;
       await assertUniqueTag(companyId, input.assetTag ?? existing.assetTag, existing.id);
@@ -350,10 +380,30 @@ export async function changeAssetStatus(raw: unknown): Promise<ActionResult<{ up
 
       const assets = await prisma.asset.findMany({
         where: { id: { in: input.ids }, deletedAt: null },
-        select: { id: true, assetTag: true, status: true, condition: true, siteId: true },
+        select: { id: true, assetTag: true, status: true, condition: true, siteId: true, assignedEmployeeId: true },
       });
       if (assets.length === 0) throw new AppError("No matching assets found.");
       assets.forEach((a) => assertSiteAccess(user, a.siteId));
+
+      if (input.status === "ASSIGNED") {
+        throw new AppError(
+          "Use Assign asset to hand assets to an employee — status alone does not create custody.",
+          { code: "INVALID_TRANSITION" }
+        );
+      }
+      const custodyConflicts = assets.filter(
+        (a) => a.assignedEmployeeId && input.status !== a.status
+      );
+      if (custodyConflicts.length > 0) {
+        throw new AppError(
+          `Record the return first: ${custodyConflicts.map((a) => a.assetTag).join(", ")}.`,
+          { code: "INVALID_TRANSITION" }
+        );
+      }
+      const illegal = assets.filter((a) => a.status !== input.status);
+      for (const asset of illegal) {
+        assertAssetTransition(asset.status, input.status, asset.assetTag);
+      }
 
       await prisma.$transaction(async (tx) => {
         await tx.asset.updateMany({
@@ -417,16 +467,10 @@ export async function assignAssets(raw: unknown): Promise<ActionResult<{ assigne
         select: { id: true, assetTag: true, status: true, siteId: true, assignedEmployeeId: true },
       });
       if (assets.length === 0) throw new AppError("No matching assets selected.");
+      assets.forEach((a) => assertSiteAccess(user, a.siteId));
 
-      const blocking = assets.filter(
-        (a) => a.status === "ASSIGNED" || a.status === "DISPOSED" || a.status === "RETIRED" || a.status === "LOST"
-      );
-      if (blocking.length > 0) {
-        throw new AppError(
-          `Unavailable: ${blocking.map((b) => b.assetTag).join(", ")}. Only available/storage assets can be assigned.`,
-          { code: "UNAVAILABLE" }
-        );
-      }
+      // One canonical rule decides whether an asset may be handed out.
+      for (const asset of assets) assertAssignable(asset.status, asset.assetTag);
 
       const expectedReturnAt = input.expectedReturnAt ? new Date(input.expectedReturnAt) : null;
       const condition = input.conditionAtAssignment;

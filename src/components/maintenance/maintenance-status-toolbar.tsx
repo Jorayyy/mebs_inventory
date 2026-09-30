@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { syncMaintenanceAssetStatus, updateMaintenance } from "@/actions/maintenance";
+import { updateMaintenance } from "@/actions/maintenance";
 import { MAINTENANCE_STATUS } from "@/lib/constants";
 
 type TicketRecord = {
@@ -38,7 +38,7 @@ type TicketRecord = {
   assetTag: string;
 };
 
-/** Detail-page action bar: updates the ticket, then reconciles the asset status. */
+/** Detail-page action bar: one save updates the ticket and the asset's status. */
 export function MaintenanceStatusToolbar({
   record,
   canManage,
@@ -81,12 +81,6 @@ export function MaintenanceStatusToolbar({
       });
       if (!result.ok) {
         toast.error(result.error, { description: `Reference: ${result.errorId}` });
-        return;
-      }
-
-      const sync = await syncMaintenanceAssetStatus(record.id);
-      if (!sync.ok) {
-        toast.error(sync.error, { description: `Reference: ${sync.errorId}` });
         return;
       }
 

@@ -8,7 +8,8 @@ const PASSWORD = process.env.SEED_PASSWORD ?? "ChangeMe123!";
 
 const ADMIN_ROUTES = [
   "/dashboard", "/assets", "/assets/new", "/labels", "/scan",
-  "/inventory", "/inventory/receive", "/suppliers",
+  "/inventory", "/inventory/new", "/inventory/transactions",
+  "/inventory/receive", "/suppliers",
   "/transfers", "/transfers/new", "/assignments", "/assignments/clearance",
   "/maintenance", "/maintenance/new", "/reports", "/audit", "/notifications",
   "/employees", "/employees/new", "/settings/organization", "/settings/users",
