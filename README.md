@@ -29,7 +29,7 @@ Prisma + PostgreSQL (Neon), Auth.js v5 and React Hook Form + Zod.
 
 Auth.js v5 credentials provider with JWT sessions. Every server action and page calls
 `requirePermission(...)` from `src/lib/session.ts` — the UI only mirrors these rules.
-45 permissions across 8 seeded roles (Super Admin, Inventory Admin, Site Admin,
+44 permissions across 8 seeded roles (Super Admin, Inventory Admin, Site Admin,
 Technician, Department Manager, Inventory Staff, Auditor, Employee). Site-scoped roles
 only ever see their own sites (`siteScope()` Prisma helper). Users without
 `dashboard.view` are redirected from `/dashboard` to `/my`.
@@ -62,7 +62,7 @@ npm run db:blank -- --yes   # wipe business data again, keeping the admin login
 
 | Email | Role |
 | --- | --- |
-| `admin@mebs.local` | Super Admin (all 45 permissions) |
+| `admin@mebs.local` | Super Admin (all 44 permissions) |
 
 Password: `admin123` (override with `SEED_PASSWORD`, reset an existing hash with
 `SEED_RESET_PASSWORD=1`).

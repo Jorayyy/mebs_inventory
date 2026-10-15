@@ -106,7 +106,8 @@ export function FilterSelect({
     <div className={cn("w-[170px]", className)}>
       <Select value={current || "ALL"} onValueChange={onChange}>
         <SelectTrigger className="h-8 text-xs" aria-label={label}>
-          <SelectValue placeholder={label} />
+          <span className="text-muted-foreground">{label}:</span>
+          <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="ALL">{allLabel}</SelectItem>

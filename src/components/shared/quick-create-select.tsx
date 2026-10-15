@@ -22,9 +22,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field, FormError } from "@/components/ui/form";
+import { useCan } from "@/components/providers/permissions";
 import { saveSite, saveDepartment, saveStockLocation } from "@/actions/org";
 import { createCategory } from "@/actions/catalog";
 import { CATEGORY_GROUP } from "@/lib/constants";
+import { PERMISSIONS } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/errors";
 
 type Entity = "site" | "category" | "department" | "stockLocation";
@@ -75,6 +77,9 @@ export function CreatableSelect({
   onCreated?: (id: string) => void;
 }) {
   const router = useRouter();
+  const canManage = useCan(
+    entity === "category" ? PERMISSIONS.CATALOG_MANAGE : PERMISSIONS.ORG_MANAGE
+  );
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
   const [code, setCode] = React.useState("");
@@ -131,6 +136,8 @@ export function CreatableSelect({
       onCreated?.(result.data.id);
       router.refresh();
       setOpen(false);
+    } catch {
+      setError("Something went wrong. Check your connection and try again.");
     } finally {
       setPending(false);
     }
@@ -150,18 +157,20 @@ export function CreatableSelect({
           ))}
         </SelectContent>
       </Select>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="shrink-0"
-        disabled={disabled}
-        title={blockedBySite ? "Select a site first" : `Create ${entity === "stockLocation" ? "storage location" : entity}`}
-        aria-label={blockedBySite ? "Select a site first" : `Create ${entity}`}
-        onClick={() => (blockedBySite ? toast.error("Select a site first") : setOpen(true))}
-      >
-        <Plus className="h-4 w-4" />
-      </Button>
+      {canManage && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="shrink-0"
+          disabled={disabled}
+          title={blockedBySite ? "Select a site first" : `Create ${entity === "stockLocation" ? "storage location" : entity}`}
+          aria-label={blockedBySite ? "Select a site first" : `Create ${entity}`}
+          onClick={() => (blockedBySite ? toast.error("Select a site first") : setOpen(true))}
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

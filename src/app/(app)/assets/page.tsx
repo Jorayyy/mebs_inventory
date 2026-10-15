@@ -38,7 +38,7 @@ export default async function AssetsPage({
   const query = parseTableQuery(searchParams);
 
   const siteId = str(searchParams, "site");
-  const categoryId = str(searchParams, "category");
+  const categoryId = str(searchParams, "categoryId");
   const status = str(searchParams, "status");
   const condition = str(searchParams, "condition");
   const departmentId = str(searchParams, "department");

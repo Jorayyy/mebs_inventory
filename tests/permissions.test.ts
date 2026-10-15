@@ -8,8 +8,8 @@ import {
 } from "@/lib/permissions";
 
 describe("permission catalogue", () => {
-  it("exposes 45 unique permission keys", () => {
-    expect(ALL_PERMISSIONS).toHaveLength(45);
+  it("exposes 44 unique permission keys", () => {
+    expect(ALL_PERMISSIONS).toHaveLength(44);
     expect(new Set(ALL_PERMISSIONS).size).toBe(ALL_PERMISSIONS.length);
   });
 
@@ -44,12 +44,14 @@ describe("permission catalogue", () => {
     expect(ROLE_DEFINITIONS.EMPLOYEE.permissions).not.toContain(PERMISSIONS.ASSETS_VIEW);
   });
 
-  it("only site admins are site-scoped", () => {
-    expect(ROLE_DEFINITIONS.SUPER_ADMIN.siteScoped).toBe(false);
-    expect(ROLE_DEFINITIONS.AUDITOR.siteScoped).toBe(false);
-    expect(ROLE_DEFINITIONS.EMPLOYEE.siteScoped).toBe(false);
-    expect(ROLE_DEFINITIONS.SITE_ADMIN.siteScoped).toBe(true);
-    expect(ROLE_DEFINITIONS.TECHNICIAN.siteScoped).toBe(true);
+  it("site-scoped roles are exactly SITE_ADMIN, TECHNICIAN, DEPARTMENT_MANAGER and INVENTORY_STAFF", () => {
+    const scoped = ROLE_KEYS.filter((key) => ROLE_DEFINITIONS[key].siteScoped).sort();
+    expect(scoped).toEqual([
+      "DEPARTMENT_MANAGER",
+      "INVENTORY_STAFF",
+      "SITE_ADMIN",
+      "TECHNICIAN",
+    ]);
   });
 
   it("nav entries reference known permissions", () => {

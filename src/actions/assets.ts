@@ -489,10 +489,18 @@ export async function assignAssets(raw: unknown): Promise<ActionResult<{ assigne
               notes: input.notes || null,
             },
           });
-          await tx.asset.update({
-            where: { id: asset.id },
+          // CAS on the status we validated above: a second click fails here and
+          // rolls back the assignment row just created.
+          const claimed = await tx.asset.updateMany({
+            where: { id: asset.id, status: asset.status, deletedAt: null },
             data: { status: "ASSIGNED", assignedEmployeeId: employee.id, condition },
           });
+          if (claimed.count === 0) {
+            throw new AppError(
+              `${asset.assetTag} was just changed by someone else — reload and try again.`,
+              { code: "INVALID_STATUS" }
+            );
+          }
           await tx.assetTransaction.create({
             data: {
               assetId: asset.id,
@@ -528,31 +536,6 @@ export async function assignAssets(raw: unknown): Promise<ActionResult<{ assigne
       return { assigned: assets.length };
     },
     { action: "assignAssets" }
-  );
-}
-
-/** Regenerates the QR payload for an asset (e.g. after a tag change). */
-export async function regenerateAssetQr(assetId: string): Promise<ActionResult<{ qrCode: string }>> {
-  return withAction(
-    async () => {
-      const user = await requirePermission(PERMISSIONS.ASSETS_UPDATE);
-      const asset = await prisma.asset.findUnique({ where: { id: assetId } });
-      if (!asset) throw new AppError("Asset not found.", { status: 404 });
-      assertSiteAccess(user, asset.siteId);
-
-      await prisma.asset.update({ where: { id: assetId }, data: { qrCode: asset.assetTag } });
-      await recordAudit({
-        userId: user.id,
-        action: "ASSET_UPDATED",
-        entityType: "Asset",
-        entityId: assetId,
-        siteId: asset.siteId,
-        description: `Regenerated QR code for ${asset.assetTag}`,
-        ...(await auditContext()),
-      });
-      return { qrCode: asset.assetTag };
-    },
-    { action: "regenerateAssetQr", assetId }
   );
 }
 

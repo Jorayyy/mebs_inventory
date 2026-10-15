@@ -382,8 +382,10 @@ export async function approveTransfer(raw: unknown): Promise<ActionResult<{ id: 
       assertTransferSites(user, transfer);
       assertStatus(transfer, ["PENDING_APPROVAL"], "approved");
 
-      await prisma.transfer.update({
-        where: { id: transfer.id },
+      // Compare-and-set: still the status we asserted a moment ago, or someone
+      // else got there first (double-click, two tabs) — never process twice.
+      const claimed = await prisma.transfer.updateMany({
+        where: { id: transfer.id, status: transfer.status },
         data: {
           status: "APPROVED",
           approvedById: user.id,
@@ -391,6 +393,11 @@ export async function approveTransfer(raw: unknown): Promise<ActionResult<{ id: 
           notes: input.notes ? appendNote(transfer.notes, input.notes) : transfer.notes,
         },
       });
+      if (claimed.count === 0) {
+        throw new AppError("This transfer was just updated by someone else — reload and try again.", {
+          code: "INVALID_STATUS",
+        });
+      }
 
       await recordAudit({
         userId: user.id,
@@ -495,8 +502,8 @@ export async function shipTransfer(raw: unknown): Promise<ActionResult<{ id: str
       const expectedArrival = input.expectedArrival ? new Date(input.expectedArrival) : transfer.expectedArrival;
 
       await withTx(async (tx) => {
-        await tx.transfer.update({
-          where: { id: transfer.id },
+        const claimed = await tx.transfer.updateMany({
+          where: { id: transfer.id, status: transfer.status },
           data: {
             status: "IN_TRANSIT",
             shippedAt: now,
@@ -506,6 +513,12 @@ export async function shipTransfer(raw: unknown): Promise<ActionResult<{ id: str
             notes: input.notes ? appendNote(transfer.notes, input.notes) : transfer.notes,
           },
         });
+        if (claimed.count === 0) {
+          throw new AppError(
+            "This transfer was just updated by someone else — reload and try again.",
+            { code: "INVALID_STATUS" }
+          );
+        }
         if (transfer.assets.length) {
           await tx.transferAsset.updateMany({
             where: { transferId: transfer.id },
@@ -577,6 +590,23 @@ export async function receiveTransfer(raw: unknown): Promise<ActionResult<{ id: 
       const now = new Date();
 
       await withTx(async (tx) => {
+        // Claim the status first: a concurrent receive fails here before any
+        // asset or stock row is touched.
+        const claimed = await tx.transfer.updateMany({
+          where: { id: transfer.id, status: transfer.status },
+          data: {
+            status: "RECEIVED",
+            actualArrival: now,
+            notes: input.notes ? appendNote(transfer.notes, input.notes) : transfer.notes,
+          },
+        });
+        if (claimed.count === 0) {
+          throw new AppError(
+            "This transfer was just updated by someone else — reload and try again.",
+            { code: "INVALID_STATUS" }
+          );
+        }
+
         const defaultDestinationLocation =
           transfer.toLocationId ??
           (
@@ -701,15 +731,6 @@ export async function receiveTransfer(raw: unknown): Promise<ActionResult<{ id: 
             data: { status: "RECEIVED", receivedQuantity: quantity, receivedAt: now },
           });
         }
-
-        await tx.transfer.update({
-          where: { id: transfer.id },
-          data: {
-            status: "RECEIVED",
-            actualArrival: now,
-            notes: input.notes ? appendNote(transfer.notes, input.notes) : transfer.notes,
-          },
-        });
       });
 
       await recordAudit({
@@ -755,13 +776,18 @@ export async function completeTransfer(raw: unknown): Promise<ActionResult<{ id:
       assertTransferSites(user, transfer);
       assertStatus(transfer, ["RECEIVED"], "completed");
 
-      await prisma.transfer.update({
-        where: { id: transfer.id },
+      const claimed = await prisma.transfer.updateMany({
+        where: { id: transfer.id, status: transfer.status },
         data: {
           status: "COMPLETED",
           notes: input.notes ? appendNote(transfer.notes, input.notes) : transfer.notes,
         },
       });
+      if (claimed.count === 0) {
+        throw new AppError("This transfer was just updated by someone else — reload and try again.", {
+          code: "INVALID_STATUS",
+        });
+      }
 
       await recordAudit({
         userId: user.id,
@@ -860,14 +886,15 @@ export async function directMoveTransfer(raw: unknown): Promise<ActionResult<{ i
   const created = await createTransfer({ ...(raw as Record<string, unknown>), submit: true });
   if (!created.ok) return created;
 
-  const steps = [
-    await approveTransfer({ id: created.data.id }),
-    await shipTransfer({ id: created.data.id, expectedArrival: "" }),
-    await receiveTransfer({ id: created.data.id, conditions: [] }),
-    await completeTransfer({ id: created.data.id }),
+  const steps: (() => Promise<ActionResult<unknown>>)[] = [
+    () => approveTransfer({ id: created.data.id }),
+    () => shipTransfer({ id: created.data.id, expectedArrival: "" }),
+    () => receiveTransfer({ id: created.data.id, conditions: [] }),
+    () => completeTransfer({ id: created.data.id }),
   ];
   for (const step of steps) {
-    if (!step.ok) return step;
+    const result = await step();
+    if (!result.ok) return result;
   }
   return created;
 }

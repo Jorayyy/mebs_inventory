@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isGlobal } from "@/lib/session";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export type SearchHit = {
   id: string;
@@ -19,6 +20,7 @@ export async function globalSearch(rawQuery: string): Promise<SearchHit[]> {
 
   const user = await getSessionUser();
   if (!user) return [];
+  if (!user.permissions.includes(PERMISSIONS.SEARCH_GLOBAL)) return [];
 
   const scope = isGlobal(user) ? {} : { siteId: { in: user.siteIds } };
   const q = query;
@@ -55,17 +57,30 @@ export async function globalSearch(rawQuery: string): Promise<SearchHit[]> {
     }),
     prisma.transfer.findMany({
       where: {
-        ...(isGlobal(user) ? {} : { fromSiteId: { in: user.siteIds } }),
-        OR: [{ transferNumber: like }, { referenceNumber: like }],
+        AND: [
+          ...(isGlobal(user)
+            ? []
+            : [
+                {
+                  OR: [
+                    { fromSiteId: { in: user.siteIds } },
+                    { toSiteId: { in: user.siteIds } },
+                  ],
+                },
+              ]),
+          { OR: [{ transferNumber: like }, { referenceNumber: like }] },
+        ],
       },
       select: { id: true, transferNumber: true, status: true },
       take: 3,
     }),
-    prisma.supplier.findMany({
-      where: { name: like },
-      select: { id: true, name: true, contactPerson: true },
-      take: 3,
-    }),
+    user.permissions.includes(PERMISSIONS.SUPPLIERS_VIEW)
+      ? prisma.supplier.findMany({
+          where: { deletedAt: null, name: like },
+          select: { id: true, name: true, contactPerson: true },
+          take: 3,
+        })
+      : Promise.resolve([]),
   ]);
 
   for (const a of assets) {

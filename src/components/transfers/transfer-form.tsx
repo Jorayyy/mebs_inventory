@@ -33,10 +33,12 @@ export function TransferForm({
   sites,
   stockLocations,
   initialAssets = [],
+  canApprove,
 }: {
   sites: { id: string; name: string; code: string }[];
   stockLocations: { id: string; name: string; siteId: string }[];
   initialAssets?: PickedAsset[];
+  canApprove?: boolean;
 }) {
   const router = useRouter();
   const [assets, setAssets] = React.useState<PickedAsset[]>(initialAssets);
@@ -242,19 +244,23 @@ export function TransferForm({
             >
               <Send /> Create transfer
             </Button>
-            <Button
-              type="submit"
-              variant="secondary"
-              className="w-full"
-              disabled={submitting}
-              onClick={() => (modeRef.current = "direct")}
-            >
-              <Zap /> Move directly
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Move directly approves, ships and receives in one step — the full audit trail is
-              still written. Otherwise the transfer waits for approval.
-            </p>
+            {canApprove && (
+              <>
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  className="w-full"
+                  disabled={submitting}
+                  onClick={() => (modeRef.current = "direct")}
+                >
+                  <Zap /> Move directly
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Move directly approves, ships and receives in one step — the full audit trail is
+                  still written. Otherwise the transfer waits for approval.
+                </p>
+              </>
+            )}
           </div>
 
           <FormError error={serverError} />

@@ -46,7 +46,6 @@ export const PERMISSIONS = {
   // Procurement
   SUPPLIERS_VIEW: "suppliers.view",
   SUPPLIERS_MANAGE: "suppliers.manage",
-  PURCHASE_ORDERS_MANAGE: "purchase_orders.manage",
 
   // People
   EMPLOYEES_VIEW: "employees.view",
@@ -106,7 +105,6 @@ const {
   MAINTENANCE_MANAGE,
   SUPPLIERS_VIEW,
   SUPPLIERS_MANAGE,
-  PURCHASE_ORDERS_MANAGE,
   EMPLOYEES_VIEW,
   EMPLOYEES_MANAGE,
   ORG_VIEW,
@@ -179,7 +177,6 @@ export const ROLE_DEFINITIONS: Record<
       MAINTENANCE_MANAGE,
       SUPPLIERS_VIEW,
       SUPPLIERS_MANAGE,
-      PURCHASE_ORDERS_MANAGE,
       EMPLOYEES_VIEW,
       EMPLOYEES_MANAGE,
       ORG_VIEW,
@@ -345,6 +342,7 @@ export const ROLE_DEFINITIONS: Record<
 /** Keys used by the sidebar / command palette for visibility filtering. */
 export const NAV_PERMISSIONS: Record<string, PermissionKey> = {
   dashboard: DASHBOARD_VIEW,
+  search: SEARCH_GLOBAL,
   assets: ASSETS_VIEW,
   inventory: INVENTORY_VIEW,
   transfers: TRANSFERS_VIEW,

@@ -14,19 +14,6 @@ async function requireSession() {
   return user;
 }
 
-/** Unread notification count for a user — feeds the header badge. */
-export async function getUnreadCount(userId: string): Promise<number> {
-  if (!userId) return 0;
-  const user = await requireSession();
-  if (user.id !== userId && !can(user, PERMISSIONS.NOTIFICATIONS_MANAGE)) {
-    throw new AppError("You do not have permission to perform this action.", {
-      status: 403,
-      code: "FORBIDDEN",
-    });
-  }
-  return prisma.notification.count({ where: { userId, readAt: null } });
-}
-
 /** Marks a single notification as read (own notifications, or any when managing). */
 export async function markNotificationRead(id: string): Promise<ActionResult<{ id: string }>> {
   return withAction(

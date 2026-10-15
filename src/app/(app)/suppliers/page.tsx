@@ -4,7 +4,7 @@ import { Plus, Truck } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermissionPage, can } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
-import { str, parseTableQuery } from "@/lib/query";
+import { str, parseTableQuery, hasFilters } from "@/lib/query";
 import { PageHeader, EmptyState } from "@/components/shared/page-header";
 import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filters";
 import { UrlDataTable } from "@/components/transfers/url-data-table";
@@ -188,8 +188,12 @@ export default async function SuppliersPage({
         emptyState={
           <EmptyState
             icon={<Truck className="h-8 w-8" />}
-            title="No suppliers found"
-            description="Register a supplier to link against purchase orders, receipts and stock items."
+            title={hasFilters(searchParams) ? "No suppliers match your filters" : "No suppliers yet"}
+            description={
+              hasFilters(searchParams)
+                ? "Clear or adjust the filters above to see more."
+                : "Register a supplier to link against purchase orders, receipts and stock items."
+            }
             action={
               canManage ? (
                 <Button size="sm" asChild>

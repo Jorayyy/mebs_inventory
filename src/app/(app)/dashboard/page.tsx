@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { FileBarChart2 } from "lucide-react";
-import { requireUser, can } from "@/lib/session";
+import { requireUser, can, isGlobal } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getDashboardData } from "@/actions/dashboard";
@@ -29,13 +29,17 @@ export default async function DashboardPage() {
   if (!can(user, PERMISSIONS.DASHBOARD_VIEW)) redirect("/my");
   const data = await getDashboardData();
 
+  const global = isGlobal(user);
+  const siteScope = global ? {} : { siteId: { in: user.siteIds } };
   const [sites, categories, departments, employees, assets, assignments] = await Promise.all([
-    prisma.site.count(),
+    prisma.site.count({
+      where: { deletedAt: null, ...(global ? {} : { id: { in: user.siteIds } }) },
+    }),
     prisma.category.count(),
-    prisma.department.count(),
-    prisma.employee.count({ where: { deletedAt: null } }),
-    prisma.asset.count({ where: { deletedAt: null } }),
-    prisma.assetAssignment.count(),
+    prisma.department.count({ where: siteScope }),
+    prisma.employee.count({ where: { deletedAt: null, ...siteScope } }),
+    prisma.asset.count({ where: { deletedAt: null, ...siteScope } }),
+    prisma.assetAssignment.count({ where: global ? {} : { asset: siteScope } }),
   ]);
   const setupCounts: SetupCounts = { sites, categories, departments, employees, assets, assignments };
   const setupCan: SetupPermissions = {

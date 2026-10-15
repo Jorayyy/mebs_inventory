@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PAGE_SIZE,
   buildQuery,
+  hasFilters,
   num,
   orderByFrom,
   parseTableQuery,
@@ -65,6 +66,24 @@ describe("buildQuery", () => {
     expect(buildQuery(current, { site: undefined })).toBe("?q=dell&page=2");
     expect(buildQuery({}, { q: "x" })).toBe("?q=x");
     expect(buildQuery({ q: "dell" }, { q: "" })).toBe("");
+  });
+});
+
+describe("hasFilters", () => {
+  it("ignores paging, sorting and view-mode keys", () => {
+    expect(hasFilters(undefined)).toBe(false);
+    expect(hasFilters({})).toBe(false);
+    expect(
+      hasFilters({ page: "2", pageSize: "25", sort: "name", dir: "desc", open: "x", assign: "1", tab: "a", ids: "1,2" })
+    ).toBe(false);
+    expect(hasFilters({ status: "" })).toBe(false);
+  });
+
+  it("treats populated values as filters", () => {
+    expect(hasFilters({ q: "dell" })).toBe(true);
+    expect(hasFilters({ site: "s1" })).toBe(true);
+    expect(hasFilters({ status: "", site: "s1" })).toBe(true);
+    expect(hasFilters({ employee: "e1" })).toBe(true);
   });
 });
 

@@ -1,6 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/session";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export type ReportRunMeta = {
   at: Date;
@@ -10,6 +12,7 @@ export type ReportRunMeta = {
 
 /** Latest export run per report slug, used for the `/reports` card metadata. */
 export async function getLastRunMetadata(slugs: string[]): Promise<Record<string, ReportRunMeta>> {
+  await requirePermission(PERMISSIONS.REPORTS_VIEW);
   if (slugs.length === 0) return {};
 
   const logs = await prisma.auditLog.findMany({

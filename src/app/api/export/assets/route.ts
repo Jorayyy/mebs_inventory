@@ -30,10 +30,24 @@ export async function GET(request: NextRequest) {
     ...scope,
     deletedAt: null,
     ...(get("site") ? { siteId: get("site") } : {}),
-    ...(get("category") ? { categoryId: get("category") } : {}),
+    ...(get("categoryId") ? { categoryId: get("categoryId") } : {}),
     ...(get("status") ? { status: get("status") as never } : {}),
     ...(get("condition") ? { condition: get("condition") as never } : {}),
     ...(get("department") ? { departmentId: get("department") } : {}),
+    ...(get("group") ? { category: { group: get("group") as never } } : {}),
+    ...(get("assigned") === "yes"
+      ? { assignedEmployeeId: { not: null } }
+      : get("assigned") === "no"
+        ? { assignedEmployeeId: null }
+        : {}),
+    ...(get("from") || get("to")
+      ? {
+          createdAt: {
+            ...(get("from") ? { gte: new Date(get("from")!) } : {}),
+            ...(get("to") ? { lte: new Date(`${get("to")}T23:59:59`) } : {}),
+          },
+        }
+      : {}),
     ...(get("q")
       ? {
           OR: [

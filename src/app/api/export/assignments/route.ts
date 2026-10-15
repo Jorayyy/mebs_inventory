@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
   };
 
   const where: Prisma.AssetAssignmentWhereInput = {
+    ...(get("employee") ? { employeeId: get("employee") } : {}),
     ...(Object.keys(assetWhere).length ? { asset: assetWhere } : {}),
     ...(Object.keys(employeeWhere).length ? { employee: employeeWhere } : {}),
     ...(get("status") ? { status: get("status") as never } : {}),

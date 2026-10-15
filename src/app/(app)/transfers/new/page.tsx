@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { isGlobal, requirePermissionPage } from "@/lib/session";
+import { can, isGlobal, requirePermissionPage } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
 import { str } from "@/lib/query";
 import { PageHeader } from "@/components/shared/page-header";
@@ -56,6 +56,7 @@ export default async function NewTransferPage({
       <TransferForm
         sites={sites}
         stockLocations={stockLocations}
+        canApprove={can(user, PERMISSIONS.TRANSFERS_APPROVE)}
         initialAssets={preselected.map((asset) => ({
           id: asset.id,
           assetTag: asset.assetTag,

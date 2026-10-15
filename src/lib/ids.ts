@@ -73,19 +73,6 @@ export async function nextMaintenanceRef(db: Db): Promise<string> {
   return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
-export async function nextPurchaseOrderNumber(db: Db, siteCode: string): Promise<string> {
-  const stamp = new Date().toISOString().slice(0, 7).replace("-", "");
-  const prefix = `PO-${siteCode}-${stamp}-`;
-  const existing = await db.purchaseOrder.findMany({
-    where: { poNumber: { startsWith: prefix } },
-    select: { poNumber: true },
-    orderBy: { poNumber: "desc" },
-    take: 50,
-  });
-  const seq = maxSequence(existing.map((p) => p.poNumber), 4) + 1;
-  return `${prefix}${String(seq).padStart(4, "0")}`;
-}
-
 /** Generates a batch of consecutive tags (used by bulk receiving). */
 export async function nextAssetTagBatch(
   db: Db,

@@ -21,7 +21,8 @@ import {
 export type NavItem = {
   label: string;
   href: string;
-  permission: PermissionKey;
+  /** null = visible to every signed-in role (the page itself only needs a session). */
+  permission: PermissionKey | null;
   icon: React.ComponentType<{ className?: string }>;
 };
 
@@ -54,7 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Overview",
     items: [
       { label: "Dashboard", href: "/dashboard", permission: p.dashboard, icon: LayoutDashboard },
-      { label: "Search & Scan", href: "/search", permission: p.assets, icon: QrCode },
+      { label: "Search & Scan", href: "/search", permission: p.search, icon: QrCode },
     ],
   },
   {
@@ -81,7 +82,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Reports", href: "/reports", permission: p.reports, icon: FileBarChart2 },
       { label: "Audit Trail", href: "/audit", permission: p.audit, icon: ScrollText },
-      { label: "Notifications", href: "/notifications", permission: p.notifications, icon: Bell },
+      { label: "Notifications", href: "/notifications", permission: null, icon: Bell },
     ],
   },
   {

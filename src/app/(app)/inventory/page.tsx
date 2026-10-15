@@ -49,7 +49,7 @@ export default async function InventoryPage({
   const query = parseTableQuery(searchParams);
 
   const siteId = str(searchParams, "site");
-  const categoryId = str(searchParams, "category");
+  const categoryId = str(searchParams, "categoryId");
   const locationId = str(searchParams, "location");
   const status = str(searchParams, "status");
   const lowOnly = str(searchParams, "low") === "yes";

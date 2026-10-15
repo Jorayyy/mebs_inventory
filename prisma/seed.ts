@@ -49,7 +49,6 @@ const PERMISSION_GROUPS: Record<string, string> = {
   transfers: "Transfers",
   maintenance: "Maintenance",
   suppliers: "Procurement",
-  purchase_orders: "Procurement",
   employees: "People",
   org: "Organisation",
   catalog: "Organisation",
@@ -126,6 +125,8 @@ async function main() {
       create: { key, name: pretty(key), group: PERMISSION_GROUPS[key.split(".")[0]] ?? "general" },
     });
   }
+  // Drop permission keys the code no longer defines (their grants cascade).
+  await prisma.permission.deleteMany({ where: { key: { notIn: [...ALL_PERMISSIONS] } } });
   const permissions = await prisma.permission.findMany({ select: { id: true, key: true } });
   const permissionId = new Map(permissions.map((p) => [p.key, p.id]));
 
@@ -142,14 +143,9 @@ async function main() {
       },
     });
 
+    // Additive only: custom grants made through ROLES_MANAGE survive a re-seed.
     const wanted = definition.permissions.map((key) => permissionId.get(key)!).filter(Boolean);
     const existing = await prisma.rolePermission.findMany({ where: { roleId: role.id } });
-    const wantedSet = new Set(wanted);
-    for (const row of existing) {
-      if (!wantedSet.has(row.permissionId)) {
-        await prisma.rolePermission.delete({ where: { id: row.id } });
-      }
-    }
     const existingSet = new Set(existing.map((row) => row.permissionId));
     for (const permissionId of wanted) {
       if (!existingSet.has(permissionId)) {

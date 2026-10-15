@@ -321,7 +321,13 @@ export async function reportAssetIssue(raw: unknown) {
 
 /** Clearance helper: every open assignment for an employee. */
 export async function getEmployeeOpenAssignments(employeeId: string) {
-  await requirePermission(PERMISSIONS.ASSIGNMENTS_VIEW);
+  const user = await requirePermission(PERMISSIONS.ASSIGNMENTS_VIEW);
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { siteId: true },
+  });
+  if (!employee) throw new AppError("Employee not found.", { status: 404 });
+  assertSiteAccess(user, employee.siteId);
   return prisma.assetAssignment.findMany({
     where: { employeeId, status: { in: ["ACTIVE", "RETURN_PENDING"] } },
     include: {

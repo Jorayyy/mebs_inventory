@@ -18,6 +18,15 @@ const credentialsSchema = z.object({
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 
+/**
+ * The one way permissions are derived: stored grants first, code-defined role
+ * baseline when a role has no rows. Login and the 5-minute refresh must agree,
+ * otherwise a user gains everything at login and loses it minutes later.
+ */
+function resolvePermissions(roleKey: string, stored: string[]): string[] {
+  return stored.length > 0 ? stored : ROLE_DEFINITIONS[roleKey as RoleKey]?.permissions ?? [];
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
@@ -130,10 +139,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const roleKey = user.role.key as RoleKey;
         const storedPermissions = user.role.permissions.map((rp) => rp.permission.key);
-        const permissions =
-          storedPermissions.length > 0
-            ? storedPermissions
-            : ROLE_DEFINITIONS[roleKey]?.permissions ?? [];
+        const permissions = resolvePermissions(roleKey, storedPermissions);
 
         await prisma.user.update({
           where: { id: user.id },
@@ -193,7 +199,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           });
           if (dbUser && !dbUser.deletedAt && dbUser.status === "ACTIVE") {
             token.role = dbUser.role.key;
-            token.permissions = dbUser.role.permissions.map((rp) => rp.permission.key);
+            token.permissions = resolvePermissions(
+              dbUser.role.key,
+              dbUser.role.permissions.map((rp) => rp.permission.key)
+            );
             token.siteIds = dbUser.siteScopes.map((s) => s.siteId);
             token.employeeId = dbUser.employee?.id ?? null;
             token.mustChangePassword = dbUser.mustChangePassword;

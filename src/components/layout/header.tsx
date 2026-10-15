@@ -84,11 +84,13 @@ export function Header({
   onOpenSearch,
   onOpenMenu,
   unread,
+  canSearch = true,
 }: {
   user: { name?: string | null; email?: string | null; role: string };
   onOpenSearch: () => void;
   onOpenMenu: () => void;
   unread: number;
+  canSearch?: boolean;
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-13 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-5">
@@ -96,16 +98,18 @@ export function Header({
         <Menu className="h-4 w-4" />
       </Button>
 
-      <button
-        onClick={onOpenSearch}
-        className="flex h-8 flex-1 items-center gap-2 rounded-md border border-input bg-muted/40 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted sm:max-w-sm"
-      >
-        <Search className="h-3.5 w-3.5" />
-        <span className="truncate">Search assets, serials, employees…</span>
-        <kbd className="ml-auto hidden rounded border bg-background px-1.5 py-0.5 text-[10px] font-medium sm:inline">
-          ⌘K
-        </kbd>
-      </button>
+      {canSearch && (
+        <button
+          onClick={onOpenSearch}
+          className="flex h-8 flex-1 items-center gap-2 rounded-md border border-input bg-muted/40 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted sm:max-w-sm"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span className="truncate">Search assets, serials, employees…</span>
+          <kbd className="ml-auto hidden rounded border bg-background px-1.5 py-0.5 text-[10px] font-medium sm:inline">
+            ⌘K
+          </kbd>
+        </button>
+      )}
 
       <div className="ml-auto flex items-center gap-1">
         <Link href="/notifications" aria-label="Notifications">
