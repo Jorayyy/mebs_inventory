@@ -4,7 +4,7 @@ import { Plus, Upload, UsersRound } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermissionPage, isGlobal, can } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
-import { str, parseTableQuery } from "@/lib/query";
+import { str, parseTableQuery, hasFilters } from "@/lib/query";
 import { PageHeader, EmptyState } from "@/components/shared/page-header";
 import { DataTable } from "@/components/shared/data-table";
 import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filters";
@@ -190,8 +190,12 @@ export default async function EmployeesPage({
         emptyState={
           <EmptyState
             icon={<UsersRound className="h-8 w-8" />}
-            title="No employees match your filters"
-            description="Clear the filters or add your first employee to start tracking headcount."
+            title={hasFilters(searchParams) ? "No employees match your filters" : "No employees yet"}
+            description={
+              hasFilters(searchParams)
+                ? "Clear or adjust the filters above to see more."
+                : "Add your first employee to start tracking headcount."
+            }
             action={
               canManage ? (
                 <Button size="sm" asChild>

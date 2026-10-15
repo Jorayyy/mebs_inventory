@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { CreatableSelect } from "@/components/shared/quick-create-select";
 import { createEmployee } from "@/actions/employees";
 
 type Values = {
@@ -137,49 +138,36 @@ export function EmployeeForm({ options }: { options: EmployeeFormOptions }) {
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Site" htmlFor="siteId" required error={err("siteId")}>
-            <Select
+            <CreatableSelect
+              entity="site"
+              id="siteId"
               value={siteId}
-              onValueChange={(value) => {
+              onChange={(value) => {
                 setSiteId(value);
                 setDepartmentId("");
                 setValue("siteId", value, { shouldValidate: true });
                 setValue("departmentId", "");
                 setValue("teamId", "");
               }}
-            >
-              <SelectTrigger id="siteId">
-                <SelectValue placeholder="Select site" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.sites.map((site) => (
-                  <SelectItem key={site.id} value={site.id}>
-                    {site.name} ({site.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={options.sites.map((site) => ({ value: site.id, label: `${site.name} (${site.code})` }))}
+              placeholder="Select site"
+            />
           </Field>
 
           <Field label="Department" htmlFor="departmentId" required error={err("departmentId")}>
-            <Select
+            <CreatableSelect
+              entity="department"
+              id="departmentId"
               value={departmentId}
-              onValueChange={(value) => {
+              siteId={siteId}
+              onChange={(value) => {
                 setDepartmentId(value);
                 setValue("departmentId", value, { shouldValidate: true });
                 setValue("teamId", "");
               }}
-            >
-              <SelectTrigger id="departmentId">
-                <SelectValue placeholder={siteId ? "Select department" : "Select a site first"} />
-              </SelectTrigger>
-              <SelectContent>
-                {departments.map((department) => (
-                  <SelectItem key={department.id} value={department.id}>
-                    {department.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={departments.map((department) => ({ value: department.id, label: department.name }))}
+              placeholder={siteId ? "Select department" : "Select a site first"}
+            />
           </Field>
 
           <Field label="Team" htmlFor="teamId" error={err("teamId")}>

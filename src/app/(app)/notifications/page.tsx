@@ -5,7 +5,7 @@ import type { Prisma, NotificationType } from "@/generated/prisma";
 import { requireUser, can, isGlobal } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { buildQuery, parseTableQuery, str } from "@/lib/query";
+import { buildQuery, parseTableQuery, str, hasFilters } from "@/lib/query";
 import { PageHeader, SectionCard, EmptyState } from "@/components/shared/page-header";
 import { Badge, toneToVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -127,8 +127,12 @@ export default async function NotificationsPage({
             {adminRows.length === 0 ? (
               <EmptyState
                 icon={<Bell className="h-8 w-8" />}
-                title="No notifications match your filters"
-                description="Clear a filter to widen the search."
+                title={hasFilters(searchParams) ? "No notifications match your filters" : "No notifications yet"}
+                description={
+                  hasFilters(searchParams)
+                    ? "Clear a filter to widen the search."
+                    : "Notifications sent by this system will appear here."
+                }
               />
             ) : (
               <div className="space-y-2">

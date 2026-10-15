@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useFormAction, Field, FormError } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { CreatableSelect } from "@/components/shared/quick-create-select";
 import { inventoryItemCreateSchema } from "@/lib/validations/inventory";
 import { UNITS } from "@/lib/constants";
 import {
@@ -134,6 +136,14 @@ function InventoryItemForm({
     };
   }, [itemId]);
 
+  const refreshOptions = React.useCallback(async () => {
+    try {
+      setOptions(await getInventoryFormOptions());
+    } catch {
+      toast.error("Could not refresh the option lists");
+    }
+  }, []);
+
   const {
     register,
     setValue,
@@ -195,25 +205,19 @@ function InventoryItemForm({
                 <Input id="name" placeholder="e.g. HP LaserJet Toner" {...register("name")} />
               </Field>
               <Field label="Category" htmlFor="categoryId" required error={err("categoryId")}>
-                <Select
+                <CreatableSelect
+                  entity="category"
+                  id="categoryId"
                   value={categoryId}
-                  onValueChange={(value) => {
+                  onChange={(value) => {
                     setCategoryId(value);
                     setValue("categoryId", value, { shouldValidate: true });
                     setValue("itemTypeId", "");
                   }}
-                >
-                  <SelectTrigger id="categoryId">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.categories.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={options.categories.map((c) => ({ value: c.id, label: c.name }))}
+                  placeholder="Select category"
+                  onCreated={refreshOptions}
+                />
               </Field>
               <Field label="Item type" htmlFor="itemTypeId" error={err("itemTypeId")}>
                 <Select
@@ -250,42 +254,31 @@ function InventoryItemForm({
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Site" htmlFor="siteId" required error={err("siteId")}>
-                <Select
+                <CreatableSelect
+                  entity="site"
+                  id="siteId"
                   value={siteId}
-                  onValueChange={(value) => {
+                  onChange={(value) => {
                     setSiteId(value);
                     setValue("siteId", value, { shouldValidate: true });
                     setValue("stockLocationId", "");
                   }}
-                >
-                  <SelectTrigger id="siteId">
-                    <SelectValue placeholder="Select site" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.sites.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name} ({s.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={options.sites.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` }))}
+                  placeholder="Select site"
+                  onCreated={refreshOptions}
+                />
               </Field>
               <Field label="Stock location" htmlFor="stockLocationId" required error={err("stockLocationId")}>
-                <Select
+                <CreatableSelect
+                  entity="stockLocation"
+                  id="stockLocationId"
+                  siteId={siteId}
                   value={watch("stockLocationId") ?? ""}
-                  onValueChange={(value) => setValue("stockLocationId", value, { shouldValidate: true })}
-                >
-                  <SelectTrigger id="stockLocationId">
-                    <SelectValue placeholder="Select location" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.map((loc) => (
-                      <SelectItem key={loc.id} value={loc.id}>
-                        {loc.name} ({loc.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(value) => setValue("stockLocationId", value, { shouldValidate: true })}
+                  options={locations.map((loc) => ({ value: loc.id, label: `${loc.name} (${loc.code})` }))}
+                  placeholder="Select location"
+                  onCreated={refreshOptions}
+                />
               </Field>
               <Field label="Bin / shelf" htmlFor="binLocation" error={err("binLocation")}>
                 <Input id="binLocation" placeholder="e.g. RACK-B3" {...register("binLocation")} />

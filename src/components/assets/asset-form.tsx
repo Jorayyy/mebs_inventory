@@ -15,6 +15,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { CreatableSelect } from "@/components/shared/quick-create-select";
+import { EmployeePicker } from "@/components/shared/employee-picker";
 import { toast } from "sonner";
 import { assetCreateSchema } from "@/lib/validations/asset";
 import { ASSET_STATUS, ASSET_CONDITION, DEPRECIATION_METHODS } from "@/lib/constants";
@@ -132,24 +134,17 @@ export function AssetForm({
           </Field>
 
           <Field label="Category" htmlFor="categoryId" required error={err("categoryId")}>
-            <Select
+            <CreatableSelect
+              entity="category"
+              id="categoryId"
               value={categoryId}
-              onValueChange={(value) => {
+              onChange={(value) => {
                 setCategoryId(value);
                 setValue("categoryId", value, { shouldValidate: true });
               }}
-            >
-              <SelectTrigger id="categoryId">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={options.categories.map((c) => ({ value: c.id, label: c.name }))}
+              placeholder="Select category"
+            />
           </Field>
 
           <Field label="Item type" htmlFor="itemTypeId" error={err("itemTypeId")}>
@@ -199,24 +194,17 @@ export function AssetForm({
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Site" htmlFor="siteId" required error={err("siteId")}>
-            <Select
+            <CreatableSelect
+              entity="site"
+              id="siteId"
               value={siteId}
-              onValueChange={(value) => {
+              onChange={(value) => {
                 setSiteId(value);
                 setValue("siteId", value, { shouldValidate: true });
               }}
-            >
-              <SelectTrigger id="siteId">
-                <SelectValue placeholder="Select site" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.sites.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name} ({s.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={options.sites.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` }))}
+              placeholder="Select site"
+            />
           </Field>
 
           <Field label="Department" htmlFor="departmentId" error={err("departmentId")}>
@@ -405,18 +393,7 @@ export function AssetForm({
             {assignNow && (
               <div className="grid grid-cols-1 gap-4 rounded-lg border bg-muted/30 p-4 sm:grid-cols-3">
                 <Field label="Assign to" htmlFor="assigneeId" required>
-                  <Select value={assigneeId} onValueChange={setAssigneeId}>
-                    <SelectTrigger id="assigneeId">
-                      <SelectValue placeholder="Select employee" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.employees.map((employee) => (
-                        <SelectItem key={employee.id} value={employee.id}>
-                          {employee.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <EmployeePicker id="assigneeId" value={assigneeId} onChange={setAssigneeId} />
                 </Field>
 
                 <Field label="Condition on handover" htmlFor="assignCondition">

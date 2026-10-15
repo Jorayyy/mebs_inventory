@@ -4,7 +4,7 @@ import { Plus, Tag, Upload, Laptop } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermissionPage, isGlobal, can } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
-import { str, num, parseTableQuery } from "@/lib/query";
+import { str, num, parseTableQuery, hasFilters } from "@/lib/query";
 import { PageHeader, EmptyState } from "@/components/shared/page-header";
 import { DataTable } from "@/components/shared/data-table";
 import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filters";
@@ -43,6 +43,7 @@ export default async function AssetsPage({
   const condition = str(searchParams, "condition");
   const departmentId = str(searchParams, "department");
   const assigned = str(searchParams, "assigned");
+  const assignMode = str(searchParams, "assign") === "1";
   const group = str(searchParams, "group");
   const from = str(searchParams, "from");
   const to = str(searchParams, "to");
@@ -245,13 +246,18 @@ export default async function AssetsPage({
             canStatus={can(user, PERMISSIONS.ASSETS_UPDATE)}
             canPrint={can(user, PERMISSIONS.ASSETS_PRINT_LABELS)}
             canTransfer={can(user, PERMISSIONS.ASSETS_TRANSFER)}
+            assignMode={assignMode}
           />
         }
         emptyState={
           <EmptyState
             icon={<Laptop className="h-8 w-8" />}
-            title="No assets match your filters"
-            description="Clear filters or register your first asset to start tracking equipment."
+            title={hasFilters(searchParams) ? "No assets match your filters" : "No assets yet"}
+            description={
+              hasFilters(searchParams)
+                ? "Clear or adjust the filters above to see more."
+                : "Register your first asset to start tracking equipment."
+            }
             action={
               can(user, PERMISSIONS.ASSETS_CREATE) ? (
                 <Button size="sm" asChild>

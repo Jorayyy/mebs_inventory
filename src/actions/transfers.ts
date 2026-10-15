@@ -850,6 +850,28 @@ export async function cancelTransfer(raw: unknown): Promise<ActionResult<{ id: s
   );
 }
 
+/**
+ * create → approve → ship → receive → complete in a single call, for installs
+ * where one person holds every transfer permission. Each step keeps its own
+ * permission check and audit entry; if a step fails the transfer stays at the
+ * stage it reached and can be finished from its detail page.
+ */
+export async function directMoveTransfer(raw: unknown): Promise<ActionResult<{ id: string }>> {
+  const created = await createTransfer({ ...(raw as Record<string, unknown>), submit: true });
+  if (!created.ok) return created;
+
+  const steps = [
+    await approveTransfer({ id: created.data.id }),
+    await shipTransfer({ id: created.data.id, expectedArrival: "" }),
+    await receiveTransfer({ id: created.data.id, conditions: [] }),
+    await completeTransfer({ id: created.data.id }),
+  ];
+  for (const step of steps) {
+    if (!step.ok) return step;
+  }
+  return created;
+}
+
 async function resolveDestinationItem(
   tx: Tx,
   transfer: TransferWithLines,

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeftRight, Upload, UserPlus } from "lucide-react";
+import { ArrowLeftRight, Upload, UserPlus, X } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { can, isGlobal, requirePermissionPage } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
-import { buildQuery, parseTableQuery, str } from "@/lib/query";
+import { buildQuery, parseTableQuery, str, hasFilters } from "@/lib/query";
 import { PageHeader, EmptyState } from "@/components/shared/page-header";
 import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filters";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ export default async function AssignmentsPage({
   const status = str(searchParams, "status");
   const siteId = str(searchParams, "site");
   const departmentId = str(searchParams, "department");
+  const employeeId = str(searchParams, "employee");
   const from = str(searchParams, "from");
   const to = str(searchParams, "to");
   const openId = str(searchParams, "open");
@@ -75,6 +76,7 @@ export default async function AssignmentsPage({
   };
 
   const base: Prisma.AssetAssignmentWhereInput = {
+    ...(employeeId ? { employeeId } : {}),
     ...(Object.keys(assetWhere).length ? { asset: assetWhere } : {}),
     ...(Object.keys(employeeWhere).length ? { employee: employeeWhere } : {}),
     ...(from || to
@@ -97,7 +99,7 @@ export default async function AssignmentsPage({
     ? ({ [sortKey.split(".")[0]]: { [sortKey.split(".")[1]]: query.dir } } as never)
     : ({ [sortKey]: query.dir } as never);
 
-  const [total, items, statusCounts, sites, departments] = await Promise.all([
+  const [total, items, statusCounts, sites, departments, employeeFilter] = await Promise.all([
     prisma.assetAssignment.count({ where }),
     prisma.assetAssignment.findMany({
       where,
@@ -146,6 +148,12 @@ export default async function AssignmentsPage({
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    employeeId
+      ? prisma.employee.findUnique({
+          where: { id: employeeId },
+          select: { firstName: true, lastName: true, employeeNo: true },
+        })
+      : null,
   ]);
 
   const counts = new Map<string, number>(statusCounts.map((row) => [row.status, row._count._all]));
@@ -258,6 +266,19 @@ export default async function AssignmentsPage({
         />
       </FilterBar>
 
+      {employeeFilter && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Showing assignments for</span>
+          <Link
+            href={`/assignments${buildQuery(currentParams, { employee: undefined, page: undefined, open: undefined })}`}
+            className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs font-medium hover:bg-accent"
+          >
+            {employeeFilter.firstName} {employeeFilter.lastName} ({employeeFilter.employeeNo})
+            <X className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
+
       <UrlDataTable
         columns={assignmentColumns}
         data={rows}
@@ -273,8 +294,14 @@ export default async function AssignmentsPage({
         emptyState={
           <EmptyState
             icon={<ArrowLeftRight className="h-8 w-8" />}
-            title="No assignments match your filters"
-            description="Assign assets to employees from the assets list."
+            title={
+              hasFilters(searchParams) ? "No assignments match your filters" : "No assignments yet"
+            }
+            description={
+              hasFilters(searchParams)
+                ? "Clear or adjust the filters above to see more."
+                : "Assign assets to employees from the assets list."
+            }
             action={
               can(user, PERMISSIONS.ASSIGNMENTS_CREATE) ? (
                 <Button size="sm" asChild>

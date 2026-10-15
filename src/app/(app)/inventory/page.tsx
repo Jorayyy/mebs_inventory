@@ -4,7 +4,7 @@ import { Boxes, Plus, Upload } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermissionPage, isGlobal, can } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
-import { str, parseTableQuery } from "@/lib/query";
+import { str, parseTableQuery, hasFilters } from "@/lib/query";
 import { PageHeader, EmptyState } from "@/components/shared/page-header";
 import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filters";
 import { UrlDataTable } from "@/components/transfers/url-data-table";
@@ -286,8 +286,14 @@ export default async function InventoryPage({
         emptyState={
           <EmptyState
             icon={<Boxes className="h-8 w-8" />}
-            title="No inventory items match your filters"
-            description="Clear the filters, or register a consumable item to start tracking stock."
+            title={
+              hasFilters(searchParams) ? "No inventory items match your filters" : "No inventory yet"
+            }
+            description={
+              hasFilters(searchParams)
+                ? "Clear or adjust the filters above to see more."
+                : "Register a consumable item to start tracking stock."
+            }
             action={
               canAdd ? (
                 <Button size="sm" asChild>

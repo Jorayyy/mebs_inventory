@@ -4,7 +4,7 @@ import { ArrowLeftRight, Plus, Upload } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { isGlobal, can, requirePermissionPage } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
-import { str, parseTableQuery, buildQuery } from "@/lib/query";
+import { str, parseTableQuery, buildQuery, hasFilters } from "@/lib/query";
 import { PageHeader, EmptyState } from "@/components/shared/page-header";
 import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filters";
 import { Button } from "@/components/ui/button";
@@ -219,8 +219,12 @@ export default async function TransfersPage({
         emptyState={
           <EmptyState
             icon={<ArrowLeftRight className="h-8 w-8" />}
-            title="No transfers match your filters"
-            description="Clear the filters or start an inter-site move."
+            title={hasFilters(searchParams) ? "No transfers match your filters" : "No transfers yet"}
+            description={
+              hasFilters(searchParams)
+                ? "Clear or adjust the filters above to see more."
+                : "Start an inter-site move to see transfers here."
+            }
             action={
               can(user, PERMISSIONS.TRANSFERS_CREATE) ? (
                 <Button size="sm" asChild>

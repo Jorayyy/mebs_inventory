@@ -65,8 +65,19 @@ export function buildQuery(current: Record<string, string | string[] | undefined
   return qs ? `?${qs}` : "";
 }
 
-/** Stable `order by` for Prisma from a whitelist — never interpolate user input. */
-export function orderByFrom<T extends Record<string, unknown>>(
+const NON_FILTER_KEYS = new Set(["page", "pageSize", "sort", "dir", "open", "assign", "tab", "ids"]);
+
+/** True when the URL actually narrows the list — drives empty-state copy. */
+export function hasFilters(params: Record<string, string | string[] | undefined> | undefined): boolean {
+  if (!params) return false;
+  return Object.entries(params).some(([key, value]) => {
+    if (NON_FILTER_KEYS.has(key)) return false;
+    const resolved = Array.isArray(value) ? value[0] : value;
+    return Boolean(resolved);
+  });
+}
+
+/** Stable `order by` for Prisma from a whitelist — never interpolate user input. */export function orderByFrom<T extends Record<string, unknown>>(
   sort: string,
   dir: SortDirection,
   whitelist: T,

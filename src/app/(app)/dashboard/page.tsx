@@ -4,10 +4,12 @@ import { redirect } from "next/navigation";
 import { FileBarChart2 } from "lucide-react";
 import { requireUser, can } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
+import { prisma } from "@/lib/prisma";
 import { getDashboardData } from "@/actions/dashboard";
 import { PageHeader, SectionCard, EmptyState } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { DashboardStatCards } from "@/components/dashboard/stat-cards";
+import { SetupChecklist, type SetupCounts, type SetupPermissions } from "@/components/dashboard/setup-checklist";
 import { CategoryBarChart, DonutChart, TrendChart } from "@/components/dashboard/charts";
 import {
   AttentionWidget,
@@ -26,6 +28,23 @@ export default async function DashboardPage() {
   const user = await requireUser();
   if (!can(user, PERMISSIONS.DASHBOARD_VIEW)) redirect("/my");
   const data = await getDashboardData();
+
+  const [sites, categories, departments, employees, assets, assignments] = await Promise.all([
+    prisma.site.count(),
+    prisma.category.count(),
+    prisma.department.count(),
+    prisma.employee.count({ where: { deletedAt: null } }),
+    prisma.asset.count({ where: { deletedAt: null } }),
+    prisma.assetAssignment.count(),
+  ]);
+  const setupCounts: SetupCounts = { sites, categories, departments, employees, assets, assignments };
+  const setupCan: SetupPermissions = {
+    org: can(user, PERMISSIONS.ORG_MANAGE),
+    catalog: can(user, PERMISSIONS.CATALOG_MANAGE),
+    employee: can(user, PERMISSIONS.EMPLOYEES_MANAGE),
+    asset: can(user, PERMISSIONS.ASSETS_CREATE),
+    assign: can(user, PERMISSIONS.ASSETS_ASSIGN),
+  };
 
   const statusChart = data.assetsByStatus.map((point) => ({
     ...point,
@@ -47,6 +66,8 @@ export default async function DashboardPage() {
           </Button>
         }
       />
+
+      <SetupChecklist counts={setupCounts} can={setupCan} />
 
       <DashboardStatCards
         stats={data.stats}

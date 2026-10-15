@@ -4,7 +4,7 @@ import { Plus, ShieldCheck, UsersRound } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermissionPage, can } from "@/lib/session";
 import { PERMISSIONS, ROLE_DEFINITIONS, ROLE_KEYS, type RoleKey } from "@/lib/permissions";
-import { parseTableQuery, str } from "@/lib/query";
+import { parseTableQuery, str, hasFilters } from "@/lib/query";
 import { PageHeader, EmptyState } from "@/components/shared/page-header";
 import { DataTable } from "@/components/shared/data-table";
 import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filters";
@@ -171,11 +171,13 @@ export default async function UsersPage({
             emptyState={
               <EmptyState
                 icon={<UsersRound className="h-8 w-8" />}
-                title="No users match your filters"
+                title={hasFilters(searchParams) ? "No users match your filters" : "No users yet"}
                 description={
-                  siteCount === 0
-                    ? "Create a site in Organization settings first, then add users."
-                    : "Clear the filters or create the first account."
+                  hasFilters(searchParams)
+                    ? "Clear or adjust the filters above to see more."
+                    : siteCount === 0
+                      ? "Create a site in Organization settings first, then add users."
+                      : "Create the first account."
                 }
                 action={
                   <Button size="sm" asChild>

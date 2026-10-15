@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { changeAssetStatus, assignAssets } from "@/actions/assets";
 import { useTableSelectionIds } from "@/components/shared/data-table";
+import { EmployeePicker } from "@/components/shared/employee-picker";
 import { ASSET_STATUS, ASSET_CONDITION } from "@/lib/constants";
 
 type Mode = "status" | "assign" | null;
@@ -35,12 +36,15 @@ export function AssetSelectionToolbar({
   canStatus,
   canPrint,
   canTransfer,
+  assignMode,
 }: {
   selectedIds?: string[];
   canAssign: boolean;
   canStatus: boolean;
   canPrint: boolean;
   canTransfer: boolean;
+  /** Arrived from `/assets?assign=1` — keeps the bar visible until something is ticked. */
+  assignMode?: boolean;
 }) {
   const router = useRouter();
   const contextIds = useTableSelectionIds();
@@ -51,24 +55,12 @@ export function AssetSelectionToolbar({
   const [employeeId, setEmployeeId] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [pending, setPending] = React.useState(false);
-  const [employees, setEmployees] = React.useState<
-    { id: string; label: string }[]
-  >([]);
-  const [loadingEmployees, setLoadingEmployees] = React.useState(false);
 
   const count = selectedIds.length;
-  if (count === 0) return null;
 
-  async function loadEmployees() {
-    setLoadingEmployees(true);
-    try {
-      const { searchEmployees } = await import("@/actions/employees");
-      const rows = await searchEmployees("");
-      setEmployees(rows.map((e) => ({ id: e.id, label: `${e.label}` })));
-    } finally {
-      setLoadingEmployees(false);
-    }
-  }
+  React.useEffect(() => {
+    if (assignMode && canAssign && count > 0) setMode("assign");
+  }, [assignMode, canAssign, count]);
 
   async function submit() {
     setPending(true);
@@ -106,6 +98,16 @@ export function AssetSelectionToolbar({
     }
   }
 
+  if (count === 0) {
+    if (!assignMode || !canAssign) return null;
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <UserPlus className="h-3.5 w-3.5" />
+        Tick the assets you want to hand out, then choose Assign.
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -118,15 +120,7 @@ export function AssetSelectionToolbar({
           </Button>
         )}
         {canAssign && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            onClick={() => {
-              setMode("assign");
-              if (employees.length === 0) void loadEmployees();
-            }}
-          >
+          <Button variant="outline" size="sm" className="h-8" onClick={() => setMode("assign")}>
             <UserPlus /> Assign
           </Button>
         )}
@@ -168,20 +162,7 @@ export function AssetSelectionToolbar({
             {mode === "assign" ? (
               <div className="space-y-1.5">
                 <Label>Employee</Label>
-                <Select value={employeeId} onValueChange={setEmployeeId}>
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={loadingEmployees ? "Loading…" : "Select employee"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <EmployeePicker value={employeeId} onChange={setEmployeeId} />
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -205,7 +186,9 @@ export function AssetSelectionToolbar({
               <Label>Condition</Label>
               <Select value={condition} onValueChange={setCondition}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Keep current condition" />
+                  <SelectValue
+                    placeholder={mode === "assign" ? "Good (default)" : "Keep current condition"}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(ASSET_CONDITION).map(([value, meta]) => (

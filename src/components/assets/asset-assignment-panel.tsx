@@ -33,9 +33,9 @@ import {
 } from "@/components/ui/table";
 import { AssignmentStatusBadge, ConditionBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/page-header";
+import { EmployeePicker } from "@/components/shared/employee-picker";
 import { formatDate } from "@/lib/utils";
 import { ASSET_CONDITION } from "@/lib/constants";
-import { assetStatusLabel } from "@/lib/lifecycle";
 import { assignAssets } from "@/actions/assets";
 import { ReturnAssignmentButton } from "@/components/assignments/return-assignment-dialog";
 import type { AssetDetailData } from "@/components/assets/asset-detail";
@@ -58,22 +58,8 @@ export function AssignmentPanel({
   const [expectedReturnAt, setExpectedReturnAt] = React.useState("");
   const [notes, setNotes] = React.useState("");
 
-  const [employees, setEmployees] = React.useState<{ id: string; label: string }[]>([]);
-  const [loadingEmployees, setLoadingEmployees] = React.useState(false);
-
-  async function openAssign() {
+  function openAssign() {
     setAssignOpen(true);
-    if (employees.length > 0) return;
-    setLoadingEmployees(true);
-    try {
-      const { getFormOptions } = await import("@/actions/catalog");
-      const options = await getFormOptions();
-      setEmployees(options.employees);
-    } catch {
-      toast.error("Could not load employees");
-    } finally {
-      setLoadingEmployees(false);
-    }
   }
 
   async function submitAssign() {
@@ -105,7 +91,6 @@ export function AssignmentPanel({
     (a) => a.status === "ACTIVE" || a.status === "RETURN_PENDING"
   ).length;
 
-  const employeeLabel = employees.find((e) => e.id === employeeId)?.label ?? "";
   const openAssignment = assignments.find(
     (a) => a.status === "ACTIVE" || a.status === "RETURN_PENDING"
   );
@@ -248,18 +233,7 @@ export function AssignmentPanel({
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>Employee</Label>
-              <Select value={employeeId} onValueChange={setEmployeeId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingEmployees ? "Loading…" : "Select employee"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EmployeePicker value={employeeId} onChange={setEmployeeId} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -291,39 +265,6 @@ export function AssignmentPanel({
             <div className="space-y-1.5">
               <Label>Notes</Label>
               <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </div>
-
-            <div className="rounded-lg border bg-muted/40 p-3 text-xs">
-              <p className="mb-1.5 font-medium text-foreground">What happens when you confirm</p>
-              <ul className="space-y-1 text-muted-foreground">
-                <li>
-                  <span className="font-mono">{asset.assetTag}</span> changes from{" "}
-                  <span className="text-foreground">{assetStatusLabel(asset.status)}</span> to{" "}
-                  <span className="text-foreground">Assigned</span>
-                  {employeeLabel ? (
-                    <>
-                      {" "}
-                      — custody held by <span className="text-foreground">{employeeLabel}</span>
-                    </>
-                  ) : null}
-                  .
-                </li>
-                <li>
-                  Condition on handover:{" "}
-                  <span className="text-foreground">
-                    {ASSET_CONDITION[condition as keyof typeof ASSET_CONDITION]?.label ?? condition}
-                  </span>
-                  .
-                </li>
-                <li>
-                  Expected return:{" "}
-                  <span className="text-foreground">
-                    {expectedReturnAt ? formatDate(expectedReturnAt) : "not set"}
-                  </span>
-                  .
-                </li>
-                <li>Written to the asset ledger and the employee&apos;s profile.</li>
-              </ul>
             </div>
           </div>
 

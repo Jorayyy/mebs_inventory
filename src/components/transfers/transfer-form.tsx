@@ -2,12 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Boxes, Package, Save, Send } from "lucide-react";
+import { ArrowRight, Boxes, Package, Save, Send, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -17,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Field, FormError, useFormAction } from "@/components/ui/form";
 import { SectionCard } from "@/components/shared/page-header";
-import { createTransfer } from "@/actions/transfers";
+import { createTransfer, directMoveTransfer } from "@/actions/transfers";
 import { AssetPicker, ConsumablePicker, type PickedAsset, type PickedLine } from "./transfer-pickers";
 
 type Values = {
@@ -43,7 +41,6 @@ export function TransferForm({
   const router = useRouter();
   const [assets, setAssets] = React.useState<PickedAsset[]>(initialAssets);
   const [items, setItems] = React.useState<PickedLine[]>([]);
-  const [submitForApproval, setSubmitForApproval] = React.useState(true);
 
   // `useFormAction` memoises its options, so the latest picker state is read
   // through a ref instead of being captured by the option object.
@@ -51,8 +48,22 @@ export function TransferForm({
   payloadRef.current = {
     assetIds: assets.map((a) => a.id),
     items: items.map((line) => ({ inventoryItemId: line.inventoryItemId, quantity: line.quantity })),
-    submit: submitForApproval,
   };
+  const modeRef = React.useRef<"draft" | "submit" | "direct">("submit");
+
+  const action = React.useCallback(
+    async (payload: Record<string, unknown>) =>
+      payload.direct ? directMoveTransfer(payload) : createTransfer(payload),
+    []
+  );
+  const extra = React.useCallback(
+    () => ({
+      ...payloadRef.current,
+      submit: modeRef.current !== "draft",
+      direct: modeRef.current === "direct",
+    }),
+    []
+  );
 
   const {
     register,
@@ -61,11 +72,15 @@ export function TransferForm({
     submitting,
     serverError,
     submit,
-  } = useFormAction<Values, { id: string }>(createTransfer, {
-    successMessage: "Transfer created",
-    extra: () => payloadRef.current,
-    onSuccess: (data) => router.push(`/transfers/${data.id}`),
-  });
+  } = useFormAction<Values, { id: string }>(
+    action,
+    {
+      successMessage: () =>
+        modeRef.current === "direct" ? "Transfer completed in one step" : "Transfer created",
+      extra,
+      onSuccess: (data) => router.push(`/transfers/${data.id}`),
+    }
+  );
 
   const fromSiteId = watch("fromSiteId");
   const toSiteId = watch("toSiteId");
@@ -218,35 +233,41 @@ export function TransferForm({
         </SectionCard>
 
         <div className="rounded-lg border bg-card p-4 shadow-sm">
-          <Label className="flex items-start gap-2.5">
-            <Checkbox
-              checked={submitForApproval}
-              onCheckedChange={(checked) => setSubmitForApproval(checked === true)}
-              className="mt-0.5"
-            />
-            <span className="text-sm">
-              Submit for approval now
-              <span className="block text-xs font-normal text-muted-foreground">
-                Uncheck to keep this transfer as a draft.
-              </span>
-            </span>
-          </Label>
+          <div className="space-y-2">
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={submitting}
+              onClick={() => (modeRef.current = "submit")}
+            >
+              <Send /> Create transfer
+            </Button>
+            <Button
+              type="submit"
+              variant="secondary"
+              className="w-full"
+              disabled={submitting}
+              onClick={() => (modeRef.current = "direct")}
+            >
+              <Zap /> Move directly
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Move directly approves, ships and receives in one step — the full audit trail is
+              still written. Otherwise the transfer waits for approval.
+            </p>
+          </div>
 
           <FormError error={serverError} />
 
           <div className="mt-3 flex gap-2">
-            <Button type="submit" className="flex-1" disabled={submitting}>
-              {submitting ? (
-                "Saving…"
-              ) : submitForApproval ? (
-                <>
-                  <Send /> Create transfer
-                </>
-              ) : (
-                <>
-                  <Save /> Save draft
-                </>
-              )}
+            <Button
+              type="submit"
+              variant="outline"
+              className="flex-1"
+              disabled={submitting}
+              onClick={() => (modeRef.current = "draft")}
+            >
+              <Save /> Save draft
             </Button>
             <Button type="button" variant="outline" onClick={() => router.back()} disabled={submitting}>
               Cancel

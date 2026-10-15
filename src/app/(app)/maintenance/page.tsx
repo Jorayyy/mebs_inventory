@@ -4,7 +4,7 @@ import { Plus, Upload, Wrench } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { can, isGlobal, requirePermissionPage } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/permissions";
-import { buildQuery, parseTableQuery, str } from "@/lib/query";
+import { buildQuery, parseTableQuery, str, hasFilters } from "@/lib/query";
 import { PageHeader, EmptyState } from "@/components/shared/page-header";
 import { FilterBar, FilterSelect, SearchInput } from "@/components/shared/filters";
 import { Button } from "@/components/ui/button";
@@ -278,8 +278,16 @@ export default async function MaintenancePage({
         emptyState={
           <EmptyState
             icon={<Wrench className="h-8 w-8" />}
-            title="No maintenance tickets match your filters"
-            description="Clear the filters or open a ticket for an asset that needs attention."
+            title={
+              hasFilters(searchParams)
+                ? "No maintenance tickets match your filters"
+                : "No maintenance tickets yet"
+            }
+            description={
+              hasFilters(searchParams)
+                ? "Clear or adjust the filters above to see more."
+                : "Open a ticket for an asset that needs attention."
+            }
             action={
               can(user, PERMISSIONS.MAINTENANCE_MANAGE) ? (
                 <Button size="sm" asChild>
