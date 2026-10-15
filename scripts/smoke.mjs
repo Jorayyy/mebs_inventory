@@ -4,7 +4,7 @@ import fs from "node:fs";
 
 const PORT = Number(process.env.SMOKE_PORT ?? 3100);
 const BASE = `http://localhost:${PORT}`;
-const PASSWORD = process.env.SEED_PASSWORD ?? "ChangeMe123!";
+const PASSWORD = process.env.SEED_PASSWORD ?? "admin123";
 
 const ADMIN_ROUTES = [
   "/dashboard", "/assets", "/assets/new", "/labels", "/scan",

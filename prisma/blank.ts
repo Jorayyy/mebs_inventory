@@ -118,7 +118,7 @@ async function main() {
   console.table(removed);
   console.log("Remaining:");
   console.table(after);
-  console.log(`\nSign in with ${ADMIN_EMAIL} · password: ${process.env.SEED_PASSWORD ?? "ChangeMe123!"}`);
+  console.log(`\nSign in with ${ADMIN_EMAIL} · password: ${process.env.SEED_PASSWORD ?? "admin123"}`);
 }
 
 main()

@@ -45,7 +45,7 @@ npm run db:seed:office   # recommended starter: 2 sites, 48 assets, 21 stock ite
 npm run dev
 ```
 
-Open http://localhost:3000 and sign in as `admin@mebs.local` / `ChangeMe123!`.
+Open http://localhost:3000 and sign in as `admin@mebs.local` / `admin123`.
 `npm run db:seed` leaves the system **empty**; `npm run db:seed:office` adds a small
 realistic starter set (rename the sites under *Organization* to match your offices).
 
@@ -64,7 +64,7 @@ npm run db:blank -- --yes   # wipe business data again, keeping the admin login
 | --- | --- |
 | `admin@mebs.local` | Super Admin (all 45 permissions) |
 
-Password: `ChangeMe123!` (override with `SEED_PASSWORD`, reset an existing hash with
+Password: `admin123` (override with `SEED_PASSWORD`, reset an existing hash with
 `SEED_RESET_PASSWORD=1`).
 
 `npm run db:seed:demo` additionally creates the demo people below — they do **not**

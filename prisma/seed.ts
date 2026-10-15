@@ -31,7 +31,7 @@ for (const file of [".env.local", ".env"]) {
 
 const prisma = new PrismaClient();
 
-const SEED_PASSWORD = process.env.SEED_PASSWORD ?? "ChangeMe123!";
+const SEED_PASSWORD = process.env.SEED_PASSWORD ?? "admin123";
 const RESET_PASSWORD = process.env.SEED_RESET_PASSWORD === "1";
 
 /**
